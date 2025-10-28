@@ -5,6 +5,7 @@ const CredChainListings = () => {
   const [activeTab, setActiveTab] = useState('borrowers');
 
   // Dummy data for borrowers
+  //
   const borrowers = [
     {
       id: 1,
