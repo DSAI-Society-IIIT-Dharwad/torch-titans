@@ -2,8 +2,12 @@
 
 import { Button } from "@/components/ui/button"
 import { Wallet, TrendingUp, Shield, Zap, LogIn } from "lucide-react"
+import { useRouter } from 'next/navigation';
+
 
 export default function Home() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Animated background gradient */}
@@ -25,6 +29,7 @@ export default function Home() {
               </span>
             </div>
             <Button
+              onClick={() => router.push('/onboarding')}
               className="glow bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-all duration-300"
             >
               <LogIn className="w-4 h-4 mr-2" />
@@ -51,6 +56,7 @@ export default function Home() {
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
               <Button
+                onClick={() => router.push('/onboarding')}
                 size="lg"
                 className="glow bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-all duration-300 text-lg px-8 py-6"
               >
