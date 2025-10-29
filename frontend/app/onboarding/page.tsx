@@ -1,100 +1,278 @@
 'use client'
-import React, { useState } from 'react';
-import { Camera, Wallet, User, Check } from 'lucide-react';
+
+import React, { useState, useEffect } from 'react';
+import { Camera, Wallet, User, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+
+interface UserProfile {
+  id: string;
+  name: string;
+  username: string;
+  pfp: string | null;
+  wallet: string;
+  risk_score: number;
+  onboarded: boolean;
+  created_at?: string;
+}
+
+interface FormData {
+  name: string;
+  username: string;
+  pfp: File | null;
+}
 
 export default function CredChainOnboarding() {
-  const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
-    id: 'privy_' + Math.random().toString(36).substr(2, 9),
+  const [step, setStep] = useState<number>(1);
+  const [wallet, setWallet] = useState<string>('');
+  const [formData, setFormData] = useState<FormData>({
     name: '',
     username: '',
-    pfp: null,
-    wallet: '',
-    risk_score: 300,
-    onboarded: false
+    pfp: null
   });
-  const [pfpPreview, setPfpPreview] = useState(null);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pfpPreview, setPfpPreview] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  const [isCheckingUser, setIsCheckingUser] = useState<boolean>(false);
 
-  const connectWallet = async () => {
-    setIsConnecting(true);
-    setTimeout(() => {
-      const mockWallet = '0x' + Math.random().toString(16).substr(2, 40);
-      setFormData(prev => ({ ...prev, wallet: mockWallet }));
-      setIsConnecting(false);
-      setStep(2);
-    }, 1500);
-  };
+  const supabase = createClient();
 
-  const handlePfpUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setFormData(prev => ({ ...prev, pfp: file }));
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPfpPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+  useEffect(() => {
+    checkWalletConnection();
+  }, []);
+
+  const checkWalletConnection = async () => {
+    if (typeof window.ethereum !== 'undefined') {
+      try {
+        const accounts = await window.ethereum.request({ 
+          method: 'eth_accounts' 
+        }) as string[];
+        
+        if (accounts.length > 0) {
+          await handleWalletConnected(accounts[0]);
+        }
+      } catch (err) {
+        console.error('Error checking wallet:', err);
+      }
     }
   };
 
-  const uploadImageToStorage = async (file, userId) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        console.log(`Uploading to: images/pfp/${userId}.jpg`);
-        resolve(`images/pfp/${userId}.jpg`);
-      }, 1000);
-    });
+  const handleWalletConnected = async (address: string) => {
+    setWallet(address);
+    setIsCheckingUser(true);
+    setError('');
+
+    try {
+      const { data: existingUser, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', address)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      if (existingUser) {
+        if (existingUser.onboarded) {
+          setStep(4);
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 2000);
+        } else {
+          setFormData({
+            name: existingUser.name || '',
+            username: existingUser.username || '',
+            pfp: null
+          });
+          if (existingUser.pfp) {
+            setPfpPreview(existingUser.pfp);
+          }
+          setStep(2);
+        }
+      } else {
+        setStep(2);
+      }
+    } catch (err) {
+      console.error('Error checking user:', err);
+      setError('Failed to check user status. Please try again.');
+    } finally {
+      setIsCheckingUser(false);
+    }
   };
 
-  const saveUserToDB = async (userData) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        console.log('Saving user data:', userData);
-        resolve(true);
-      }, 1000);
-    });
+  const connectWallet = async () => {
+    if (typeof window.ethereum === 'undefined') {
+      setError('MetaMask is not installed. Please install MetaMask to continue.');
+      return;
+    }
+
+    setIsConnecting(true);
+    setError('');
+
+    try {
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_requestAccounts' 
+      }) as string[];
+      
+      if (accounts.length > 0) {
+        await handleWalletConnected(accounts[0]);
+      }
+
+      window.ethereum.on('accountsChanged', (accounts: string[]) => {
+        if (accounts.length > 0) {
+          handleWalletConnected(accounts[0]);
+        } else {
+          setWallet('');
+          setStep(1);
+        }
+      });
+    } catch (err) {
+      console.error('Wallet connection error:', err);
+      setError('Failed to connect wallet. Please try again.');
+    } finally {
+      setIsConnecting(false);
+    }
   };
 
-  const handleSubmit = async () => {
+  const handlePfpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Image size should be less than 5MB');
+        return;
+      }
+
+      setFormData(prev => ({ ...prev, pfp: file }));
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPfpPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+      setError('');
+    }
+  };
+
+  const uploadImageToSupabase = async (file: File, userId: string): Promise<string> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${userId}-${Date.now()}.${fileExt}`;
+    const filePath = `pfp/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('user-profiles')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true
+      });
+
+    if (uploadError) {
+      throw new Error(`Upload failed: ${uploadError.message}`);
+    }
+
+    const { data } = supabase.storage
+      .from('user-profiles')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
+  };
+
+  const checkUsernameAvailability = async (username: string): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('username')
+      .eq('username', username)
+      .neq('id', wallet);
+
+    if (error) {
+      throw error;
+    }
+
+    return data.length === 0;
+  };
+
+  const handleProfileContinue = async () => {
+    if (!formData.name.trim()) {
+      setError('Please enter your full name');
+      return;
+    }
+
+    if (!formData.username.trim()) {
+      setError('Please enter a username');
+      return;
+    }
+
+    if (formData.username.length < 3) {
+      setError('Username must be at least 3 characters');
+      return;
+    }
+
+    setError('');
     setIsSubmitting(true);
 
     try {
-      let pfpUrl = null;
-      if (formData.pfp) {
-        pfpUrl = await uploadImageToStorage(formData.pfp, formData.id);
+      const isAvailable = await checkUsernameAvailability(formData.username);
+      if (!isAvailable) {
+        setError('Username is already taken. Please choose another one.');
+        setIsSubmitting(false);
+        return;
       }
 
-      const userData = {
-        id: formData.id,
-        name: formData.name,
-        username: formData.username,
-        pfp: pfpUrl,
-        wallet: formData.wallet,
-        risk_score: formData.risk_score,
-        onboarded: true,
-        created_at: new Date().toISOString()
-      };
-
-      await saveUserToDB(userData);
-
-      setStep(4);
-      
-      setTimeout(() => {
-        console.log('Redirecting to dashboard...');
-      }, 2000);
-
-    } catch (error) {
-      console.error('Onboarding error:', error);
+      setStep(3);
+    } catch (err) {
+      console.error('Error checking username:', err);
+      setError('Failed to verify username. Please try again.');
+    } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleProfileContinue = () => {
-    if (formData.name && formData.username) {
-      setStep(3);
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      let pfpUrl: string | null = null;
+
+      if (formData.pfp) {
+        pfpUrl = await uploadImageToSupabase(formData.pfp, wallet);
+      }
+
+      const userData: UserProfile = {
+        id: wallet,
+        name: formData.name.trim(),
+        username: formData.username.trim().toLowerCase(),
+        pfp: pfpUrl,
+        wallet: wallet,
+        risk_score: 300,
+        onboarded: true,
+        created_at: new Date().toISOString()
+      };
+
+      const { error: upsertError } = await supabase
+        .from('users')
+        .upsert(userData, {
+          onConflict: 'id'
+        });
+
+      if (upsertError) {
+        throw upsertError;
+      }
+
+      setStep(4);
+      
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 2000);
+
+    } catch (err) {
+      console.error('Onboarding error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save profile. Please try again.');
+      setIsSubmitting(false);
     }
+  };
+
+  const formatAddress = (addr: string): string => {
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
   return (
@@ -112,27 +290,36 @@ export default function CredChainOnboarding() {
           </p>
         </div>
 
-        <div className="flex justify-center items-center mb-8 gap-2">
-          {[1, 2, 3].map((s) => (
-            <div key={s} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
-                step >= s 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-slate-800 text-gray-500'
-              }`}>
-                {step > s ? <Check size={16} /> : s}
+        {step < 4 && (
+          <div className="flex justify-center items-center mb-8 gap-2">
+            {[1, 2, 3].map((s) => (
+              <div key={s} className="flex items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
+                  step >= s 
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-slate-800 text-gray-500'
+                }`}>
+                  {step > s ? <Check size={16} /> : s}
+                </div>
+                {s < 3 && (
+                  <div className={`w-12 h-0.5 transition-colors ${
+                    step > s ? 'bg-blue-500' : 'bg-slate-800'
+                  }`}></div>
+                )}
               </div>
-              {s < 3 && (
-                <div className={`w-12 h-0.5 transition-colors ${
-                  step > s ? 'bg-blue-500' : 'bg-slate-800'
-                }`}></div>
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl border border-slate-800/50 shadow-2xl p-8">
           
+          {error && (
+            <div className="mb-6 bg-red-500/10 border border-red-500/50 rounded-xl p-4 flex items-start gap-3">
+              <AlertCircle className="text-red-400 flex-shrink-0 mt-0.5" size={20} />
+              <p className="text-red-300 text-sm">{error}</p>
+            </div>
+          )}
+
           {step === 1 && (
             <div className="space-y-6">
               <div className="text-center">
@@ -149,13 +336,13 @@ export default function CredChainOnboarding() {
 
               <button
                 onClick={connectWallet}
-                disabled={isConnecting}
+                disabled={isConnecting || isCheckingUser}
                 className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold py-4 rounded-xl transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
-                {isConnecting ? (
+                {isConnecting || isCheckingUser ? (
                   <span className="flex items-center justify-center gap-2">
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    Connecting...
+                    <Loader2 className="animate-spin" size={20} />
+                    {isCheckingUser ? 'Checking account...' : 'Connecting...'}
                   </span>
                 ) : (
                   'Connect Wallet'
@@ -180,7 +367,7 @@ export default function CredChainOnboarding() {
 
               <div className="flex flex-col items-center">
                 <label className="text-sm font-medium text-gray-300 mb-3">
-                  Profile Photo
+                  Profile Photo (Optional)
                 </label>
                 <div className="relative">
                   <input
@@ -205,7 +392,7 @@ export default function CredChainOnboarding() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Full Name
+                  Full Name *
                 </label>
                 <input
                   type="text"
@@ -213,20 +400,28 @@ export default function CredChainOnboarding() {
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Enter your full name"
                   className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  maxLength={100}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Username
+                  Username *
                 </label>
                 <input
                   type="text"
                   value={formData.username}
-                  onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value.toLowerCase().replace(/\s/g, '') }))}
-                  placeholder="@username"
+                  onChange={(e) => setFormData(prev => ({ 
+                    ...prev, 
+                    username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') 
+                  }))}
+                  placeholder="username"
                   className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  maxLength={30}
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Lowercase letters, numbers, and underscores only
+                </p>
               </div>
 
               <div>
@@ -234,16 +429,23 @@ export default function CredChainOnboarding() {
                   Wallet Address
                 </label>
                 <div className="bg-slate-800/30 border border-slate-700 rounded-xl px-4 py-3 text-gray-400 text-sm font-mono">
-                  {formData.wallet.slice(0, 6)}...{formData.wallet.slice(-4)}
+                  {formatAddress(wallet)}
                 </div>
               </div>
 
               <button
                 onClick={handleProfileContinue}
-                disabled={!formData.name || !formData.username}
+                disabled={!formData.name.trim() || !formData.username.trim() || isSubmitting}
                 className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold py-4 rounded-xl transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
-                Continue
+                {isSubmitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="animate-spin" size={20} />
+                    Checking...
+                  </span>
+                ) : (
+                  'Continue'
+                )}
               </button>
             </div>
           )}
@@ -262,7 +464,11 @@ export default function CredChainOnboarding() {
               <div className="space-y-4">
                 {pfpPreview && (
                   <div className="flex justify-center">
-                    <img src={pfpPreview} alt="Profile" className="w-20 h-20 rounded-full object-cover border-2 border-blue-500" />
+                    <img 
+                      src={pfpPreview} 
+                      alt="Profile" 
+                      className="w-20 h-20 rounded-full object-cover border-2 border-blue-500" 
+                    />
                   </div>
                 )}
 
@@ -278,12 +484,12 @@ export default function CredChainOnboarding() {
                   <div className="flex justify-between">
                     <span className="text-gray-400 text-sm">Wallet</span>
                     <span className="text-white font-mono text-sm">
-                      {formData.wallet.slice(0, 6)}...{formData.wallet.slice(-4)}
+                      {formatAddress(wallet)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-slate-700">
                     <span className="text-gray-400 text-sm">Initial Risk Score</span>
-                    <span className="text-blue-400 font-bold text-lg">{formData.risk_score}</span>
+                    <span className="text-blue-400 font-bold text-lg">300</span>
                   </div>
                 </div>
               </div>
@@ -291,7 +497,8 @@ export default function CredChainOnboarding() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setStep(2)}
-                  className="flex-1 bg-slate-800/50 hover:bg-slate-800 text-white font-semibold py-4 rounded-xl transition-all"
+                  disabled={isSubmitting}
+                  className="flex-1 bg-slate-800/50 hover:bg-slate-800 text-white font-semibold py-4 rounded-xl transition-all disabled:opacity-50"
                 >
                   Back
                 </button>
@@ -302,11 +509,11 @@ export default function CredChainOnboarding() {
                 >
                   {isSubmitting ? (
                     <span className="flex items-center justify-center gap-2">
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <Loader2 className="animate-spin" size={20} />
                       Saving...
                     </span>
                   ) : (
-                    'Save & Continue'
+                    'Complete Setup'
                   )}
                 </button>
               </div>
