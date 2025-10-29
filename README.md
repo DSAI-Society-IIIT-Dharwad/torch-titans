@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # CredChain - Complete User Guide
 
 ## Table of Contents
@@ -29,6 +28,8 @@
 - **Better rates** - Lenders can earn more, borrowers can pay less
 - **Your wallet is your ID** - No lengthy paperwork
 - **Global** - Connect with anyone, anywhere
+
+![work flow](src/flow_chart.jpg)
 
 ---
 
@@ -1314,4 +1315,3 @@ Created by DSAI Society IIIT Dharwad - feel free to contact us!
 - Thanks to all contributors
 - Built during [Your Hackathon/Event Name]
 - Special thanks to mentors and advisors
->>>>>>> origin/contri
