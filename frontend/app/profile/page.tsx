@@ -451,23 +451,10 @@ export default function ProfileDashboard() {
   }
 
   const getProfileImage = (pfp: string | null | undefined, username: string): string => {
-<<<<<<< HEAD
     if (pfp && typeof pfp === 'string' && pfp.trim() !== '') {
       return pfp
     }
     return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
-=======
-    const seedUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
-    if (typeof pfp === 'string' && pfp.trim() !== '') {
-      // Accept only absolute URLs or public paths starting with '/'
-      if (pfp.startsWith('http') || pfp.startsWith('/')) {
-        return pfp
-      }
-      // If pfp is a relative path without leading slash (e.g. 'images/pfp/x.png'), treat as missing
-    }
-    // Fallback to dicebear avatar
-    return seedUrl
->>>>>>> origin/contri
   }
 
   const getInitials = (name: string): string => {
@@ -884,16 +871,8 @@ export default function ProfileDashboard() {
         </Dialog>
 
         {/* Lend Modal */}
-<<<<<<< HEAD
         <Dialog open={lendModalOpen} onOpenChange={setLendModalOpen}>
           <DialogContent className="border-2 border-primary/20 shadow-2xl bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
-=======
-        <Dialog 
-          open={lendModalOpen} 
-          onOpenChange={(open: boolean) => setLendModalOpen(open)}
-        >
-          <DialogContent className="border-2 border-primary/20 shadow-2xl max-w-4xl bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
->>>>>>> origin/contri
             <DialogHeader>
               <DialogTitle className="text-2xl flex items-center gap-2">
                 <ArrowUpRight className="h-6 w-6 text-primary" />
