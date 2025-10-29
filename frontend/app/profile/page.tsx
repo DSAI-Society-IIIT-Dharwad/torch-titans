@@ -19,9 +19,12 @@ import {
   Wallet,
   DollarSign,
   Activity,
-  LogOut // Icon added
+  LogOut,
+  Store,
+  AlertCircle
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { ethers } from "ethers"
 
 interface UserData {
   id: string
@@ -73,6 +76,7 @@ interface Loan {
   start_date: string
   due_date: string
   status: string
+  transaction_hash?: string
   lender?: {
     username: string
   }
@@ -80,6 +84,18 @@ interface Loan {
     username: string
   }
 }
+
+// Simple ERC20 ABI for USDC transfers
+const ERC20_ABI = [
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function balanceOf(address account) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)"
+]
+
+// Sepolia Testnet USDC Contract Address
+const USDC_ADDRESS = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
 
 export default function ProfileDashboard() {
   const router = useRouter()
@@ -99,6 +115,7 @@ export default function ProfileDashboard() {
   const [copied, setCopied] = useState(false)
   const [historyTab, setHistoryTab] = useState<"borrowed" | "lended">("borrowed")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [transactionStatus, setTransactionStatus] = useState<string>("")
 
   useEffect(() => {
     checkWalletAndLoadData()
@@ -152,7 +169,6 @@ export default function ProfileDashboard() {
 
   const handleLogout = async () => {
     try {
-      // Request user to revoke permissions
       if (typeof window.ethereum !== 'undefined') {
         await window.ethereum.request({
           method: 'wallet_revokePermissions',
@@ -162,17 +178,14 @@ export default function ProfileDashboard() {
         })
       }
 
-      // Clear app state
       setWallet("")
       setUserData(null)
       setBorrowed([])
       setLended([])
 
-      // Redirect
       router.push('/')
     } catch (error) {
       console.error('Error disconnecting:', error)
-      // Still clear state and redirect even if revoke fails
       setWallet("")
       setUserData(null)
       router.push('/')
@@ -242,6 +255,88 @@ export default function ProfileDashboard() {
     }
   }
 
+  const switchToSepolia = async (): Promise<boolean> => {
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0xaa36a7' }], // Sepolia chain ID
+      })
+      return true
+    } catch (switchError: unknown) {
+      const error = switchError as { code?: number }
+      if (error.code === 4902) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0xaa36a7',
+              chainName: 'Sepolia Testnet',
+              nativeCurrency: {
+                name: 'Sepolia ETH',
+                symbol: 'ETH',
+                decimals: 18
+              },
+              rpcUrls: ['https://sepolia.infura.io/v3/'],
+              blockExplorerUrls: ['https://sepolia.etherscan.io']
+            }]
+          })
+          return true
+        } catch (addError) {
+          console.error('Error adding Sepolia network:', addError)
+          return false
+        }
+      }
+      return false
+    }
+  }
+
+  const sendUSDCTransaction = async (
+    recipientAddress: string,
+    amountInUSD: number
+  ): Promise<string> => {
+    try {
+      if (!window.ethereum) throw new Error("No wallet found")
+
+      // Switch to Sepolia
+      const switched = await switchToSepolia()
+      if (!switched) {
+        throw new Error("Please switch to Sepolia testnet")
+      }
+
+      setTransactionStatus("Connecting to wallet...")
+      
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      
+      // Create USDC contract instance
+      const usdcContract = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer)
+      
+      // USDC has 6 decimals
+      const decimals = 6
+      const amount = ethers.parseUnits(amountInUSD.toString(), decimals)
+      
+      setTransactionStatus("Waiting for transaction approval...")
+      
+      // Send transaction
+      const tx = await usdcContract.transfer(recipientAddress, amount)
+      
+      setTransactionStatus("Transaction submitted. Waiting for confirmation...")
+      
+      // Wait for transaction confirmation
+      const receipt = await tx.wait()
+      
+      setTransactionStatus("Transaction confirmed!")
+      
+      return receipt.hash
+    } catch (error) {
+      console.error('Transaction error:', error)
+      if (error instanceof Error) {
+        throw new Error(`Transaction failed: ${error.message}`)
+      }
+      throw new Error('Transaction failed')
+    }
+  }
+
   const copyAddress = () => {
     if (userData?.wallet) {
       navigator.clipboard.writeText(userData.wallet)
@@ -290,9 +385,21 @@ export default function ProfileDashboard() {
     if (!userData) return
 
     setIsSubmitting(true)
+    setTransactionStatus("")
+    
     try {
       const offer = loanOffers.find(o => o.id === offerId)
       if (!offer) return
+
+      // Execute blockchain transaction first
+      setTransactionStatus("Initiating blockchain transaction...")
+      
+      const txHash = await sendUSDCTransaction(
+        offer.lender_id, // The borrower's address
+        offer.amount
+      )
+
+      setTransactionStatus("Recording loan in database...")
 
       const dueDate = new Date()
       dueDate.setDate(dueDate.getDate() + offer.repayment_duration)
@@ -301,6 +408,7 @@ export default function ProfileDashboard() {
         offer.amount * (1 + offer.interest_rate / 100)
       )
 
+      // Record the loan with transaction hash
       const { error: loanError } = await supabase
         .from('loans')
         .insert({
@@ -312,36 +420,40 @@ export default function ProfileDashboard() {
           repayment_duration_days: offer.repayment_duration,
           start_date: new Date().toISOString(),
           due_date: dueDate.toISOString(),
-          status: 'active'
+          status: 'active',
+          transaction_hash: txHash
         })
 
       if (loanError) throw loanError
 
+      // Update offer status
       await supabase
         .from('loan_offers')
         .update({ status: 'accepted' })
         .eq('id', offerId)
 
-      alert('Successfully lent to user!')
+      setTransactionStatus("Success!")
+      alert(`Successfully lent to user!\nTransaction Hash: ${txHash}`)
       setLendModalOpen(false)
       await loadTransactionData(userData.id)
 
     } catch (error) {
       console.error('Error lending to user:', error)
-      alert('Failed to process lending')
+      if (error instanceof Error) {
+        alert(error.message)
+      } else {
+        alert('Failed to process lending')
+      }
+      setTransactionStatus("")
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const getProfileImage = (pfp: string | null | undefined, username: string): string => {
-    // Check if pfp exists and is a valid string
     if (pfp && typeof pfp === 'string' && pfp.trim() !== '') {
-      // If it's a relative URL, you might need to prefix it with your domain
-      // For now, return as is
       return pfp
     }
-    // Fallback to dicebear avatar
     return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
   }
 
@@ -402,7 +514,7 @@ export default function ProfileDashboard() {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
 
-        {/* Header - UPDATED WITH LOGOUT BUTTON */}
+        {/* Header */}
         <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="space-y-2">
             <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary via-primary to-primary/60 bg-clip-text text-transparent">
@@ -411,17 +523,25 @@ export default function ProfileDashboard() {
             <p className="text-muted-foreground text-lg">Manage your crypto lending and borrowing activities</p>
           </div>
 
-          <Button
-            variant="outline"
-            onClick={handleLogout}
-            className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-500 shrink-0"
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => router.push('/listing')}
+              className="border-primary/50 text-primary hover:bg-primary/10 hover:text-primary shrink-0"
+            >
+              <Store className="mr-2 h-4 w-4" />
+              Marketplace
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleLogout}
+              className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-500 shrink-0"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
-        {/* --- END OF UPDATED HEADER --- */}
-
 
         {/* Profile Card */}
         <Card className="mb-6 border-2 border-primary/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
@@ -600,6 +720,7 @@ export default function ProfileDashboard() {
                     <th className="text-left py-4 px-6 text-muted-foreground font-semibold">Status</th>
                     <th className="text-left py-4 px-6 text-muted-foreground font-semibold">Start Date</th>
                     <th className="text-left py-4 px-6 text-muted-foreground font-semibold">Due Date</th>
+                    <th className="text-left py-4 px-6 text-muted-foreground font-semibold">TX Hash</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -636,6 +757,20 @@ export default function ProfileDashboard() {
                       </td>
                       <td className="py-4 px-6 text-muted-foreground">
                         {formatDate(transaction.due_date)}
+                      </td>
+                      <td className="py-4 px-6">
+                        {transaction.transaction_hash ? (
+                          <a
+                            href={`https://sepolia.etherscan.io/tx/${transaction.transaction_hash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline text-xs font-mono"
+                          >
+                            {formatAddress(transaction.transaction_hash)}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">N/A</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -734,7 +869,7 @@ export default function ProfileDashboard() {
 
         {/* Lend Modal */}
         <Dialog open={lendModalOpen} onOpenChange={setLendModalOpen}>
-          <DialogContent className="border-2 border-primary/20 shadow-2xl max-w-4xl bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
+          <DialogContent className="border-2 border-primary/20 shadow-2xl bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
             <DialogHeader>
               <DialogTitle className="text-2xl flex items-center gap-2">
                 <ArrowUpRight className="h-6 w-6 text-primary" />
@@ -744,6 +879,13 @@ export default function ProfileDashboard() {
                 Choose an offer to accept and start earning interest
               </DialogDescription>
             </DialogHeader>
+
+            {transactionStatus && (
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                <p className="text-sm text-blue-500 font-medium">{transactionStatus}</p>
+              </div>
+            )}
 
             <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
               {loanOffers.length === 0 ? (
