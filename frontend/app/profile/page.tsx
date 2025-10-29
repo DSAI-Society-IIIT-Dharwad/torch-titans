@@ -451,10 +451,23 @@ export default function ProfileDashboard() {
   }
 
   const getProfileImage = (pfp: string | null | undefined, username: string): string => {
+<<<<<<< HEAD
     if (pfp && typeof pfp === 'string' && pfp.trim() !== '') {
       return pfp
     }
     return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
+=======
+    const seedUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
+    if (typeof pfp === 'string' && pfp.trim() !== '') {
+      // Accept only absolute URLs or public paths starting with '/'
+      if (pfp.startsWith('http') || pfp.startsWith('/')) {
+        return pfp
+      }
+      // If pfp is a relative path without leading slash (e.g. 'images/pfp/x.png'), treat as missing
+    }
+    // Fallback to dicebear avatar
+    return seedUrl
+>>>>>>> origin/contri
   }
 
   const getInitials = (name: string): string => {
@@ -778,7 +791,7 @@ export default function ProfileDashboard() {
               </table>
             </div>
 
-            {(historyTab === "borrowed" ? borrowed : lended).length === 0 && (
+            {((historyTab === "borrowed" ? borrowed : lended) || []).length === 0 && (
               <div className="text-center py-16">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted/50 mb-4">
                   <Wallet className="h-8 w-8 text-muted-foreground" />
@@ -793,7 +806,10 @@ export default function ProfileDashboard() {
         </Card>
 
         {/* Borrow Modal */}
-        <Dialog open={borrowModalOpen} onOpenChange={setBorrowModalOpen}>
+        <Dialog 
+          open={borrowModalOpen} 
+          onOpenChange={(open: boolean) => setBorrowModalOpen(open)}
+        >
           <DialogContent className="border-2 border-primary/20 shadow-2xl bg-gradient-to-br from-card to-card/50 backdrop-blur-sm max-w-md">
             <DialogHeader>
               <DialogTitle className="text-2xl flex items-center gap-2">
@@ -817,18 +833,18 @@ export default function ProfileDashboard() {
                   value={borrowAmount}
                   onChange={(e) => setBorrowAmount(e.target.value)}
                   className="bg-muted/50 border-border text-foreground h-12 text-lg"
-                  max={userData.max_loan}
+                  max={userData?.max_loan || 0}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Maximum loan amount: <span className="font-semibold text-primary">${userData.max_loan.toLocaleString()}</span>
+                  Maximum loan amount: <span className="font-semibold text-primary">${userData?.max_loan?.toLocaleString() || 0}</span>
                 </p>
               </div>
 
               <div className="bg-gradient-to-br from-muted/50 to-muted/30 p-5 rounded-xl space-y-3 border border-border/50">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">Your Risk Score</span>
-                  <span className={`font-bold text-lg ${getRiskScoreColor(userData.risk_score)}`}>
-                    {userData.risk_score}/800
+                  <span className={`font-bold text-lg ${getRiskScoreColor(userData?.risk_score || 0)}`}>
+                    {userData?.risk_score || 0}/800
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -868,8 +884,16 @@ export default function ProfileDashboard() {
         </Dialog>
 
         {/* Lend Modal */}
+<<<<<<< HEAD
         <Dialog open={lendModalOpen} onOpenChange={setLendModalOpen}>
           <DialogContent className="border-2 border-primary/20 shadow-2xl bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
+=======
+        <Dialog 
+          open={lendModalOpen} 
+          onOpenChange={(open: boolean) => setLendModalOpen(open)}
+        >
+          <DialogContent className="border-2 border-primary/20 shadow-2xl max-w-4xl bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
+>>>>>>> origin/contri
             <DialogHeader>
               <DialogTitle className="text-2xl flex items-center gap-2">
                 <ArrowUpRight className="h-6 w-6 text-primary" />

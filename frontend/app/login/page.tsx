@@ -2,13 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Wallet, TrendingUp, DollarSign, Clock, CheckCircle } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client'
+
+const supabase = createClient()
 
 const P2PLendingPlatform = () => {
-  const [account, setAccount] = useState(null);
-  const [balance, setBalance] = useState('0');
-  const [activeTab, setActiveTab] = useState('borrow');
-  const [loans, setLoans] = useState([]);
-  const [myLoans, setMyLoans] = useState([]);
+  const [account, setAccount] = useState<string | null>(null);
+  const [balance, setBalance] = useState<string>('0');
+  const [activeTab, setActiveTab] = useState<'borrow' | 'lend' | 'myloans'>('borrow');
+  const [loans, setLoans] = useState<any[]>([]);
+  const [myLoans, setMyLoans] = useState<any[]>([]);
   
   // Form states
   const [loanAmount, setLoanAmount] = useState('');
@@ -42,7 +45,7 @@ const P2PLendingPlatform = () => {
         setAccount(accounts[0]);
         getBalance(accounts[0]);
         
-        window.ethereum.on('accountsChanged', (accounts) => {
+        window.ethereum.on('accountsChanged', (accounts: string[]) => {
           setAccount(accounts[0] || null);
           if (accounts[0]) getBalance(accounts[0]);
         });
@@ -55,58 +58,89 @@ const P2PLendingPlatform = () => {
     }
   };
 
-  const getBalance = async (address) => {
+  const getBalance = async (address: string) => {
     try {
-      const balanceHex = await window.ethereum.request({
+      const eth = window.ethereum;
+      if (!eth) return;
+      const balanceHex = await eth.request({
         method: 'eth_getBalance',
         params: [address, 'latest']
       });
       const balanceEth = parseInt(balanceHex, 16) / 1e18;
       setBalance(balanceEth.toFixed(4));
-    } catch (error) {
-      console.error('Error getting balance:', error);
+    } catch (err: unknown) {
+      const e = err as any;
+      console.error('Error getting balance:', e.message ?? e);
     }
   };
 
   const loadLoans = async () => {
     try {
-      const stored = await window.storage.list('loan:', true);
-      if (stored && stored.keys) {
-        const loanPromises = stored.keys.map(async (key) => {
-          const result = await window.storage.get(key, true);
-          return result ? JSON.parse(result.value) : null;
-        });
-        const allLoans = (await Promise.all(loanPromises)).filter(l => l !== null);
-        setLoans(allLoans.filter(l => l.status === 'open'));
+      // Fetch active loan requests from Supabase
+      const { data: requests, error } = await supabase
+        .from('loan_requests')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(100)
+
+      if (error) {
+        console.error('Error fetching loan requests:', error)
+        setLoans([])
+      } else {
+        // Map DB rows to the UI shape used in this page
+        const mapped = (requests || []).map((r: any) => ({
+          id: r.id,
+          borrower: r.borrower_id,
+          amount: r.amount,
+          interestRate: 0,
+          duration: r.repayment_duration_days,
+          purpose: r.purpose || '',
+          status: r.status,
+          createdAt: r.created_at
+        }))
+        setLoans(mapped)
       }
-    } catch (error) {
-      console.log('No loans yet or error loading:', error);
-      setLoans([]);
+    } catch (e) {
+      console.error('No loans yet or error loading:', e)
+      setLoans([])
     }
-    
-    loadMyLoans();
+
+    // Also refresh my loans view
+    await loadMyLoans();
   };
 
   const loadMyLoans = async () => {
     if (!account) return;
-    
+
     try {
-      const stored = await window.storage.list('loan:', true);
-      if (stored && stored.keys) {
-        const loanPromises = stored.keys.map(async (key) => {
-          const result = await window.storage.get(key, true);
-          return result ? JSON.parse(result.value) : null;
-        });
-        const allLoans = (await Promise.all(loanPromises)).filter(l => l !== null);
-        const userLoans = allLoans.filter(l => 
-          l.borrower.toLowerCase() === account.toLowerCase() || 
-          l.lender?.toLowerCase() === account.toLowerCase()
-        );
-        setMyLoans(userLoans);
+      // Fetch loans where the user is borrower or lender
+      const { data: loansData, error } = await supabase
+        .from('loans')
+        .select('*')
+        .or(`borrower_id.eq.${account},lender_id.eq.${account}`)
+        .order('start_date', { ascending: false })
+        .limit(200)
+
+      if (error) {
+        console.error('Error fetching user loans:', error)
+        setMyLoans([])
+      } else {
+        const mapped = (loansData || []).map((l: any) => ({
+          id: l.id,
+          borrower: l.borrower_id,
+          lender: l.lender_id,
+          amount: l.principal_amount,
+          interestRate: l.interest_rate,
+          duration: l.repayment_duration_days,
+          status: l.status,
+          createdAt: l.start_date
+        }))
+        setMyLoans(mapped)
       }
-    } catch (error) {
-      console.log('Error loading my loans:', error);
-      setMyLoans([]);
+    } catch (e) {
+      console.error('Error loading my loans:', e)
+      setMyLoans([])
     }
   };
 
@@ -115,129 +149,138 @@ const P2PLendingPlatform = () => {
       alert('Please connect your wallet first');
       return;
     }
-
-    if (!loanAmount || !interestRate || !duration) {
-      alert('Please fill in all fields');
+    if (!loanAmount || !duration) {
+      alert('Please fill in amount and duration');
       return;
     }
 
-    const loanId = `loan:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const loan = {
-      id: loanId,
-      borrower: account,
-      amount: parseFloat(loanAmount),
-      interestRate: parseFloat(interestRate),
-      duration: parseInt(duration),
-      purpose: purpose || 'General purpose',
-      status: 'open',
-      createdAt: Date.now(),
-      lender: null
-    };
-
     try {
-      await window.storage.set(loanId, JSON.stringify(loan), true);
-      alert('Loan request created successfully!');
-      setLoanAmount('');
-      setInterestRate('');
-      setDuration('');
-      setPurpose('');
-      loadLoans();
-    } catch (error) {
-      console.error('Error creating loan:', error);
-      alert('Failed to create loan request');
+      const id = `lr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+      const { error } = await supabase
+        .from('loan_requests')
+        .insert({
+          id,
+          borrower_id: account,
+          amount: parseFloat(loanAmount),
+          repayment_duration_days: parseInt(duration),
+          status: 'active',
+          created_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+
+      alert('Loan request created successfully!')
+      setLoanAmount('')
+      setInterestRate('')
+      setDuration('')
+      setPurpose('')
+      await loadLoans()
+    } catch (err: any) {
+      console.error('Error creating loan request:', err)
+      alert('Failed to create loan request')
     }
   };
 
-  const fundLoan = async (loan) => {
+  const fundLoan = async (loan: any) => {
     if (!account) {
       alert('Please connect your wallet first');
       return;
     }
-
     if (loan.borrower.toLowerCase() === account.toLowerCase()) {
       alert('You cannot fund your own loan request');
       return;
     }
 
     try {
-      // Convert ETH to Wei (hex)
-      const amountWei = '0x' + Math.floor(loan.amount * 1e18).toString(16);
-      
-      // Send transaction
-      const txHash = await window.ethereum.request({
+      // Send ETH transaction
+      const eth = window.ethereum
+      if (!eth) throw new Error('Ethereum provider not found')
+
+      const amountWei = '0x' + Math.floor(loan.amount * 1e18).toString(16)
+
+      const txHash = await eth.request({
         method: 'eth_sendTransaction',
-        params: [{
-          from: account,
-          to: loan.borrower,
-          value: amountWei,
-          gas: '0x5208', // 21000 gas
-        }],
-      });
+        params: [
+          {
+            from: account,
+            to: loan.borrower,
+            value: amountWei
+          }
+        ]
+      })
 
-      // Update loan status
-      const updatedLoan = {
-        ...loan,
-        lender: account,
-        status: 'active',
-        fundedAt: Date.now(),
-        txHash: txHash,
-        repaymentDue: Date.now() + (loan.duration * 24 * 60 * 60 * 1000)
-      };
+      // Create a loan record in Supabase
+      const dueDate = new Date()
+      dueDate.setDate(dueDate.getDate() + (loan.duration || 0))
 
-      await window.storage.set(loan.id, JSON.stringify(updatedLoan), true);
-      
-      alert(`Transaction sent! Hash: ${txHash.substring(0, 10)}...`);
-      loadLoans();
-    } catch (error) {
-      console.error('Error funding loan:', error);
-      alert('Transaction failed: ' + error.message);
+      const { error: insertErr } = await supabase.from('loans').insert({
+        lender_id: account,
+        borrower_id: loan.borrower,
+        principal_amount: loan.amount,
+        interest_rate: loan.interestRate || 0,
+        total_repayment_amount: Math.floor(loan.amount * (1 + (loan.interestRate || 0) / 100)),
+        repayment_duration_days: loan.duration,
+        start_date: new Date().toISOString(),
+        due_date: dueDate.toISOString(),
+        status: 'active'
+      })
+
+      if (insertErr) throw insertErr
+
+      // Mark original loan request as closed
+      await supabase.from('loan_requests').update({ status: 'closed' }).eq('id', loan.id)
+
+      alert(`Transaction sent! Hash: ${String(txHash).slice(0, 10)}...`)
+      await loadLoans()
+      await loadMyLoans()
+    } catch (err: any) {
+      console.error('Error funding loan:', err)
+      alert('Transaction failed: ' + (err?.message ?? String(err)))
     }
   };
 
-  const repayLoan = async (loan) => {
+  const repayLoan = async (loan: any) => {
     if (!account || loan.borrower.toLowerCase() !== account.toLowerCase()) {
       alert('Only the borrower can repay this loan');
       return;
     }
-
-    const totalRepayment = loan.amount * (1 + loan.interestRate / 100);
+    const totalRepayment = loan.amount * (1 + (loan.interestRate || 0) / 100)
 
     try {
-      const amountWei = '0x' + Math.floor(totalRepayment * 1e18).toString(16);
-      
-      const txHash = await window.ethereum.request({
+      const amountWei = '0x' + Math.floor(totalRepayment * 1e18).toString(16)
+
+      const eth = window.ethereum
+      if (!eth) throw new Error('Ethereum provider not found')
+
+      const txHash = await eth.request({
         method: 'eth_sendTransaction',
-        params: [{
-          from: account,
-          to: loan.lender,
-          value: amountWei,
-          gas: '0x5208',
-        }],
-      });
+        params: [
+          {
+            from: account,
+            to: loan.lender,
+            value: amountWei
+          }
+        ]
+      })
 
-      const updatedLoan = {
-        ...loan,
-        status: 'repaid',
-        repaidAt: Date.now(),
-        repaymentTxHash: txHash
-      };
+      // Update loan status in Supabase
+      const { error } = await supabase.from('loans').update({ status: 'closed' }).eq('id', loan.id)
+      if (error) throw error
 
-      await window.storage.set(loan.id, JSON.stringify(updatedLoan), true);
-      
-      alert(`Repayment sent! Hash: ${txHash.substring(0, 10)}...`);
-      loadLoans();
-    } catch (error) {
-      console.error('Error repaying loan:', error);
-      alert('Repayment failed: ' + error.message);
+      alert(`Repayment sent! Hash: ${String(txHash).slice(0, 10)}...`)
+      await loadMyLoans()
+    } catch (err: any) {
+      console.error('Error repaying loan:', err)
+      alert('Repayment failed: ' + (err?.message ?? String(err)))
     }
   };
 
-  const formatAddress = (addr) => {
+  const formatAddress = (addr?: string) => {
     if (!addr) return '';
     return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
   };
 
-  const calculateRepayment = (amount, rate) => {
+  const calculateRepayment = (amount: number, rate: number) => {
     return (amount * (1 + rate / 100)).toFixed(4);
   };
 
@@ -362,12 +405,12 @@ const P2PLendingPlatform = () => {
                   
                   <div>
                     <label className="block text-sm font-medium mb-2">Purpose (optional)</label>
-                    <textarea
+                      <textarea
                       value={purpose}
                       onChange={(e) => setPurpose(e.target.value)}
                       className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       placeholder="Business expansion, education, etc."
-                      rows="3"
+                      rows={3}
                     />
                   </div>
 

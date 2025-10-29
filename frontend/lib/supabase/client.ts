@@ -1,12 +1,16 @@
 import { createBrowserClient } from '@supabase/ssr'
+import { Database } from '@/types/supabase'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
+export function createClient(): SupabaseClient<Database, 'public', any> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    throw new Error('Missing Supabase environment variables')
+  }
 
-// adding the api keys here 
-// this will not be used in production
-// adding so you can see the projects working.
-export function createClient() {
+  // createBrowserClient currently doesn't always propagate the generic through the helper types
+  // so cast to the strongly-typed SupabaseClient to ensure `.from()` and related methods are typed.
   return createBrowserClient(
-    "https://uzdmytfsczbsvnkrhyyp.supabase.co",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6ZG15dGZzY3pic3Zua3JoeXlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2MzMxNjMsImV4cCI6MjA3NzIwOTE2M30.K5c5kdkxJbvHDIJmqGrUg4gLxihJYkfrpbGX0EUSDZo"
-  )
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  ) as unknown as SupabaseClient<Database, 'public', any>
 }
