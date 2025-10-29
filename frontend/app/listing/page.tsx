@@ -29,44 +29,63 @@ const CredChainListings = () => {
       // Loan requests -> Borrowers
       const { data: requests, error: reqErr } = await supabase
         .from('loan_requests')
-        .select(`id, borrower_id, amount, repayment_duration_days, status, created_at, borrower:users!loan_requests_borrower_id_fkey(username, pfp)`)
+        .select(`id, borrower_id, amount, repayment_duration_days, status, created_at, borrower:users!loan_requests_borrower_id_fkey(username, name, pfp)`)
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(50)
 
       if (reqErr) throw reqErr
 
-      const mappedBorrowers = (requests || []).map((r: any) => ({
-        id: r.id,
-        name: r.borrower?.username || r.borrower_id,
-        username: r.borrower?.username ? `@${r.borrower.username}` : formatAddress(r.borrower_id),
-        avatar: r.borrower?.pfp || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(r.borrower?.username || r.borrower_id)}`,
-        amount: `$${Number(r.amount).toLocaleString()}`,
-        createdAt: formatDate(r.created_at)
-      }))
+      const mappedBorrowers = (requests || []).map((r: any) => {
+        const userName = r.borrower?.name || r.borrower?.username || r.borrower_id
+        const seedUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(userName)}`
+        const pfp = r.borrower?.pfp
+        // accept pfp only if it's an absolute URL or starts with a slash (public/)
+        const avatar = (typeof pfp === 'string' && pfp.trim() !== '' && (pfp.startsWith('http') || pfp.startsWith('/')))
+          ? pfp
+          : seedUrl
+
+        return {
+          id: r.id,
+          name: userName,
+          username: r.borrower?.username ? `@${r.borrower.username}` : formatAddress(r.borrower_id),
+          avatar,
+          amount: `$${Number(r.amount).toLocaleString()}`,
+          createdAt: formatDate(r.created_at)
+        }
+      })
 
       setBorrowers(mappedBorrowers)
 
       // Loan offers -> Lenders
       const { data: offers, error: offersErr } = await supabase
         .from('loan_offers')
-        .select(`id, lender_id, amount, interest_rate, repayment_duration, status, created_at, lender:users!loan_offers_lender_id_fkey(username, pfp)`)
+        .select(`id, lender_id, amount, interest_rate, repayment_duration, status, created_at, lender:users!loan_offers_lender_id_fkey(username, name, pfp)`)
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(50)
 
       if (offersErr) throw offersErr
 
-      const mappedLenders = (offers || []).map((o: any) => ({
-        id: o.id,
-        name: o.lender?.username || o.lender_id,
-        username: o.lender?.username ? `@${o.lender.username}` : formatAddress(o.lender_id),
-        avatar: o.lender?.pfp || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(o.lender?.username || o.lender_id)}`,
-        amount: `$${Number(o.amount).toLocaleString()}`,
-        interestRate: `${o.interest_rate}%`,
-        duration: `${o.repayment_duration} days`,
-        createdAt: formatDate(o.created_at)
-      }))
+      const mappedLenders = (offers || []).map((o: any) => {
+        const userName = o.lender?.name || o.lender?.username || o.lender_id
+        const seedUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(userName)}`
+        const pfp = o.lender?.pfp
+        const avatar = (typeof pfp === 'string' && pfp.trim() !== '' && (pfp.startsWith('http') || pfp.startsWith('/')))
+          ? pfp
+          : seedUrl
+
+        return {
+          id: o.id,
+          name: userName,
+          username: o.lender?.username ? `@${o.lender.username}` : formatAddress(o.lender_id),
+          avatar,
+          amount: `$${Number(o.amount).toLocaleString()}`,
+          interestRate: `${o.interest_rate}%`,
+          duration: `${o.repayment_duration} days`,
+          createdAt: formatDate(o.created_at)
+        }
+      })
 
       setLenders(mappedLenders)
     } catch (e: any) {
@@ -140,10 +159,17 @@ const CredChainListings = () => {
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 p-0.5 shadow-lg shadow-blue-500/30 group-hover:shadow-blue-500/50 transition-all duration-300">
-                    <img 
-                      src={borrower.avatar} 
+                    <img
+                      src={borrower.avatar}
                       alt={borrower.name}
                       className="w-full h-full rounded-full bg-zinc-900"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement
+                        // fallback to dicebear using name seed
+                        const seed = encodeURIComponent(borrower.name || borrower.username || borrower.id)
+                        target.onerror = null
+                        target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`
+                      }}
                     />
                   </div>
                   <div>
@@ -182,10 +208,16 @@ const CredChainListings = () => {
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 p-0.5 shadow-lg shadow-purple-500/30 group-hover:shadow-purple-500/50 transition-all duration-300">
-                    <img 
-                      src={lender.avatar} 
+                    <img
+                      src={lender.avatar}
                       alt={lender.name}
                       className="w-full h-full rounded-full bg-zinc-900"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement
+                        const seed = encodeURIComponent(lender.name || lender.username || lender.id)
+                        target.onerror = null
+                        target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`
+                      }}
                     />
                   </div>
                   <div>

@@ -335,14 +335,16 @@ export default function ProfileDashboard() {
   }
 
   const getProfileImage = (pfp: string | null | undefined, username: string): string => {
-    // Check if pfp exists and is a valid string
-    if (pfp && typeof pfp === 'string' && pfp.trim() !== '') {
-      // If it's a relative URL, you might need to prefix it with your domain
-      // For now, return as is
-      return pfp
+    const seedUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
+    if (typeof pfp === 'string' && pfp.trim() !== '') {
+      // Accept only absolute URLs or public paths starting with '/'
+      if (pfp.startsWith('http') || pfp.startsWith('/')) {
+        return pfp
+      }
+      // If pfp is a relative path without leading slash (e.g. 'images/pfp/x.png'), treat as missing
     }
     // Fallback to dicebear avatar
-    return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
+    return seedUrl
   }
 
   const getInitials = (name: string): string => {

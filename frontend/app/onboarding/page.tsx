@@ -86,7 +86,12 @@ export default function CredChainOnboarding() {
             pfp: null
           });
           if (existingUser.pfp) {
-            setPfpPreview(existingUser.pfp);
+            // Normalize preview URL: if pfp is a full URL or starts with '/', use it; otherwise fallback to dicebear seed
+            const p = existingUser.pfp
+            const preview = (typeof p === 'string' && p.trim() !== '' && (p.startsWith('http') || p.startsWith('/')))
+              ? p
+              : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(existingUser.name || existingUser.username || existingUser.id)}`
+            setPfpPreview(preview);
           }
           setStep(2);
         }
