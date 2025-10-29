@@ -159,7 +159,7 @@ export default function CredChainOnboarding() {
     const filePath = `pfp/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
-      .from('user-profiles')
+      .from('images/pfp')
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: true
