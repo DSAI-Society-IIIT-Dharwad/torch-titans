@@ -261,7 +261,7 @@ export default function CredChainOnboarding() {
       setStep(4);
       
       setTimeout(() => {
-        window.location.href = '/dashboard';
+        window.location.href = '/profile';
       }, 2000);
 
     } catch (err) {

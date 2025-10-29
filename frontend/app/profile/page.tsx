@@ -9,7 +9,18 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { ArrowUpRight, ArrowDownRight, Copy, Check, Loader2, TrendingUp, Wallet, DollarSign, Activity } from "lucide-react"
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  Copy,
+  Check,
+  Loader2,
+  TrendingUp,
+  Wallet,
+  DollarSign,
+  Activity,
+  LogOut // Icon added
+} from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 
 interface UserData {
@@ -73,7 +84,7 @@ interface Loan {
 export default function ProfileDashboard() {
   const router = useRouter()
   const supabase = createClient()
-  
+
   const [wallet, setWallet] = useState<string>("")
   const [userData, setUserData] = useState<UserData | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
@@ -81,7 +92,7 @@ export default function ProfileDashboard() {
   const [lended, setLended] = useState<Loan[]>([])
   const [loanOffers, setLoanOffers] = useState<LoanOffer[]>([])
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
-  
+
   const [borrowModalOpen, setBorrowModalOpen] = useState(false)
   const [lendModalOpen, setLendModalOpen] = useState(false)
   const [borrowAmount, setBorrowAmount] = useState("")
@@ -100,8 +111,8 @@ export default function ProfileDashboard() {
         return
       }
 
-      const accounts = await window.ethereum.request({ 
-        method: 'eth_accounts' 
+      const accounts = await window.ethereum.request({
+        method: 'eth_accounts'
       }) as string[]
 
       if (accounts.length === 0) {
@@ -130,12 +141,41 @@ export default function ProfileDashboard() {
 
       setUserData(user)
       await loadTransactionData(walletAddress)
-      
+
     } catch (error) {
       console.error('Error checking wallet:', error)
       router.push('/onboarding')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      // Request user to revoke permissions
+      if (typeof window.ethereum !== 'undefined') {
+        await window.ethereum.request({
+          method: 'wallet_revokePermissions',
+          params: [{
+            eth_accounts: {}
+          }]
+        })
+      }
+
+      // Clear app state
+      setWallet("")
+      setUserData(null)
+      setBorrowed([])
+      setLended([])
+
+      // Redirect
+      router.push('/')
+    } catch (error) {
+      console.error('Error disconnecting:', error)
+      // Still clear state and redirect even if revoke fails
+      setWallet("")
+      setUserData(null)
+      router.push('/')
     }
   }
 
@@ -212,11 +252,11 @@ export default function ProfileDashboard() {
 
   const handleBorrowSubmit = async () => {
     if (!borrowAmount || !userData) return
-    
+
     setIsSubmitting(true)
     try {
       const amount = parseInt(borrowAmount)
-      
+
       if (amount > userData.max_loan) {
         alert(`Maximum loan amount is $${userData.max_loan}`)
         setIsSubmitting(false)
@@ -237,7 +277,7 @@ export default function ProfileDashboard() {
       setBorrowModalOpen(false)
       setBorrowAmount("")
       await loadTransactionData(userData.id)
-      
+
     } catch (error) {
       console.error('Error submitting borrow request:', error)
       alert('Failed to submit loan request')
@@ -248,7 +288,7 @@ export default function ProfileDashboard() {
 
   const handleLendToUser = async (offerId: string) => {
     if (!userData) return
-    
+
     setIsSubmitting(true)
     try {
       const offer = loanOffers.find(o => o.id === offerId)
@@ -285,7 +325,7 @@ export default function ProfileDashboard() {
       alert('Successfully lent to user!')
       setLendModalOpen(false)
       await loadTransactionData(userData.id)
-      
+
     } catch (error) {
       console.error('Error lending to user:', error)
       alert('Failed to process lending')
@@ -325,11 +365,11 @@ export default function ProfileDashboard() {
     const totalBorrowed = borrowed
       .filter(l => l.status === 'active')
       .reduce((sum, loan) => sum + loan.principal_amount, 0)
-    
+
     const totalLent = lended
       .filter(l => l.status === 'active')
       .reduce((sum, loan) => sum + loan.principal_amount, 0)
-    
+
     const transactions = borrowed.length + lended.length
 
     return { totalBorrowed, totalLent, transactions }
@@ -361,13 +401,27 @@ export default function ProfileDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
-        {/* Header */}
-        <div className="mb-8 space-y-2">
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary via-primary to-primary/60 bg-clip-text text-transparent">
-            Welcome back, {userData.name}
-          </h1>
-          <p className="text-muted-foreground text-lg">Manage your crypto lending and borrowing activities</p>
+
+        {/* Header - UPDATED WITH LOGOUT BUTTON */}
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary via-primary to-primary/60 bg-clip-text text-transparent">
+              Welcome back, {userData.name}
+            </h1>
+            <p className="text-muted-foreground text-lg">Manage your crypto lending and borrowing activities</p>
+          </div>
+
+          <Button
+            variant="outline"
+            onClick={handleLogout}
+            className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-500 shrink-0"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
         </div>
+        {/* --- END OF UPDATED HEADER --- */}
+
 
         {/* Profile Card */}
         <Card className="mb-6 border-2 border-primary/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
@@ -378,8 +432,8 @@ export default function ProfileDashboard() {
                 <div className="relative group">
                   <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary/60 rounded-full blur-xl opacity-50 group-hover:opacity-75 transition-opacity"></div>
                   <Avatar className="relative h-32 w-32 border-4 border-primary/30 shadow-xl">
-                    <AvatarImage 
-                      src={getProfileImage(userData.pfp, userData.username)} 
+                    <AvatarImage
+                      src={getProfileImage(userData.pfp, userData.username)}
                       alt={userData.username}
                     />
                     <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/10 text-primary text-3xl font-bold">
@@ -396,15 +450,15 @@ export default function ProfileDashboard() {
               <div className="flex-1 space-y-6 w-full">
                 <div>
                   <h2 className="text-3xl font-bold text-foreground mb-3">@{userData.username}</h2>
-                  
+
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <code className="bg-muted/70 px-4 py-2 rounded-lg font-mono text-sm border border-border/50 backdrop-blur-sm">
                       {formatAddress(userData.wallet)}
                     </code>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-9 w-9 hover:bg-primary/10" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 hover:bg-primary/10"
                       onClick={copyAddress}
                     >
                       {copied ? (
@@ -510,11 +564,10 @@ export default function ProfileDashboard() {
                 <Button
                   variant={historyTab === "borrowed" ? "default" : "ghost"}
                   size="sm"
-                  className={`transition-all duration-200 ${
-                    historyTab === "borrowed"
+                  className={`transition-all duration-200 ${historyTab === "borrowed"
                       ? "bg-primary text-primary-foreground shadow-md"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
+                    }`}
                   onClick={() => setHistoryTab("borrowed")}
                 >
                   Borrowed
@@ -522,11 +575,10 @@ export default function ProfileDashboard() {
                 <Button
                   variant={historyTab === "lended" ? "default" : "ghost"}
                   size="sm"
-                  className={`transition-all duration-200 ${
-                    historyTab === "lended"
+                  className={`transition-all duration-200 ${historyTab === "lended"
                       ? "bg-primary text-primary-foreground shadow-md"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
+                    }`}
                   onClick={() => setHistoryTab("lended")}
                 >
                   Lended
@@ -552,12 +604,12 @@ export default function ProfileDashboard() {
                 </thead>
                 <tbody>
                   {(historyTab === "borrowed" ? borrowed : lended).map((transaction) => (
-                    <tr 
-                      key={transaction.id} 
+                    <tr
+                      key={transaction.id}
                       className="border-b border-border/30 hover:bg-muted/20 transition-colors"
                     >
                       <td className="py-4 px-6 text-foreground font-medium">
-                        {historyTab === "borrowed" 
+                        {historyTab === "borrowed"
                           ? transaction.lender?.username || 'Unknown'
                           : transaction.borrower?.username || 'Unknown'
                         }
@@ -571,11 +623,10 @@ export default function ProfileDashboard() {
                       <td className="py-4 px-6">
                         <Badge
                           variant={transaction.status === "active" ? "default" : "secondary"}
-                          className={`${
-                            transaction.status === "active"
+                          className={`${transaction.status === "active"
                               ? "bg-green-500/20 text-green-500 border-green-500/30"
                               : "bg-muted/50 text-muted-foreground border-border/50"
-                          }`}
+                            }`}
                         >
                           {transaction.status}
                         </Badge>
@@ -711,11 +762,11 @@ export default function ProfileDashboard() {
                         <div className="space-y-4 flex-1">
                           <div className="flex items-center gap-4">
                             <Avatar className="h-12 w-12 border-2 border-primary/30 shadow-md">
-                              <AvatarImage 
+                              <AvatarImage
                                 src={getProfileImage(
-                                  offer.lender?.pfp || null, 
+                                  offer.lender?.pfp || null,
                                   offer.lender?.username || 'User'
-                                )} 
+                                )}
                               />
                               <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/10 text-primary text-sm font-bold">
                                 {(offer.lender?.username || 'U').slice(0, 2).toUpperCase()}
