@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,212 +9,461 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { ArrowUpRight, ArrowDownRight, Copy, Check } from "lucide-react"
+import { ArrowUpRight, ArrowDownRight, Copy, Check, Loader2, TrendingUp, Wallet, DollarSign, Activity } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 
-// Dummy data
-const userData = {
-  username: "cryptowhale.eth",
-  walletAddress: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-  accountType: "Lender",
-  profileImage: "/crypto-avatar.png",
-  creditScore: 850,
-  totalBorrowed: 0,
-  totalLent: 125000,
-  transactions: 47,
-  joinedDate: "Jan 2024",
+interface UserData {
+  id: string
+  name: string
+  username: string
+  pfp: string | null
+  wallet: string
+  risk_score: number
+  onboarded: boolean
+  created_at: string
+  max_loan: number
 }
 
-const borrowRequests = [
-  {
-    id: 1,
-    borrower: "defi_trader",
-    amount: 5000,
-    interestRate: 8.5,
-    creditScore: 720,
-    duration: "30 days",
-    collateral: "ETH",
-  },
-  {
-    id: 2,
-    borrower: "nft_collector",
-    amount: 12000,
-    interestRate: 7.2,
-    creditScore: 780,
-    duration: "60 days",
-    collateral: "BTC",
-  },
-  {
-    id: 3,
-    borrower: "yield_farmer",
-    amount: 8500,
-    interestRate: 9.0,
-    creditScore: 690,
-    duration: "45 days",
-    collateral: "USDC",
-  },
-  {
-    id: 4,
-    borrower: "dao_member",
-    amount: 20000,
-    interestRate: 6.8,
-    creditScore: 820,
-    duration: "90 days",
-    collateral: "ETH",
-  },
-]
+interface LoanOffer {
+  id: string
+  lender_id: string
+  amount: number
+  interest_rate: number
+  repayment_duration: number
+  status: string
+  created_at: string
+  lender?: {
+    username: string
+    pfp: string | null
+  }
+}
 
-const borrowedHistory = [
-  {
-    id: 1,
-    lender: "yield_master",
-    amount: 5000,
-    interestRate: 7.5,
-    status: "Active",
-    startDate: "Oct 15, 2024",
-    dueDate: "Nov 15, 2024",
-  },
-  {
-    id: 2,
-    lender: "crypto_fund",
-    amount: 8000,
-    interestRate: 6.8,
-    status: "Completed",
-    startDate: "Sep 1, 2024",
-    dueDate: "Oct 1, 2024",
-  },
-  {
-    id: 3,
-    lender: "defi_protocol",
-    amount: 3500,
-    interestRate: 8.2,
-    status: "Active",
-    startDate: "Oct 20, 2024",
-    dueDate: "Dec 20, 2024",
-  },
-]
+interface LoanRequest {
+  id: string
+  borrower_id: string
+  amount: number
+  status: string
+  created_at: string
+  borrower?: {
+    username: string
+    pfp: string | null
+    risk_score: number
+  }
+}
 
-const lendedHistory = [
-  {
-    id: 1,
-    borrower: "defi_trader",
-    amount: 5000,
-    interestRate: 8.5,
-    status: "Active",
-    startDate: "Oct 10, 2024",
-    dueDate: "Nov 10, 2024",
-  },
-  {
-    id: 2,
-    borrower: "nft_collector",
-    amount: 12000,
-    interestRate: 7.2,
-    status: "Completed",
-    startDate: "Aug 15, 2024",
-    dueDate: "Oct 15, 2024",
-  },
-  {
-    id: 3,
-    borrower: "yield_farmer",
-    amount: 8500,
-    interestRate: 9.0,
-    status: "Active",
-    startDate: "Oct 5, 2024",
-    dueDate: "Nov 20, 2024",
-  },
-  {
-    id: 4,
-    borrower: "dao_member",
-    amount: 20000,
-    interestRate: 6.8,
-    status: "Active",
-    startDate: "Sep 20, 2024",
-    dueDate: "Dec 20, 2024",
-  },
-]
+interface Loan {
+  id: string
+  lender_id: string
+  borrower_id: string
+  principal_amount: number
+  interest_rate: number
+  total_repayment_amount: number
+  repayment_duration_days: number
+  start_date: string
+  due_date: string
+  status: string
+  lender?: {
+    username: string
+  }
+  borrower?: {
+    username: string
+  }
+}
 
 export default function ProfileDashboard() {
+  const router = useRouter()
+  const supabase = createClient()
+  
+  const [wallet, setWallet] = useState<string>("")
+  const [userData, setUserData] = useState<UserData | null>(null)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [borrowed, setBorrowed] = useState<Loan[]>([])
+  const [lended, setLended] = useState<Loan[]>([])
+  const [loanOffers, setLoanOffers] = useState<LoanOffer[]>([])
+  const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
+  
   const [borrowModalOpen, setBorrowModalOpen] = useState(false)
   const [lendModalOpen, setLendModalOpen] = useState(false)
   const [borrowAmount, setBorrowAmount] = useState("")
   const [copied, setCopied] = useState(false)
   const [historyTab, setHistoryTab] = useState<"borrowed" | "lended">("borrowed")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    checkWalletAndLoadData()
+  }, [])
+
+  const checkWalletAndLoadData = async () => {
+    try {
+      if (typeof window.ethereum === 'undefined') {
+        router.push('/onboarding')
+        return
+      }
+
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_accounts' 
+      }) as string[]
+
+      if (accounts.length === 0) {
+        router.push('/onboarding')
+        return
+      }
+
+      const walletAddress = accounts[0]
+      setWallet(walletAddress)
+
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', walletAddress)
+        .single()
+
+      if (error || !user) {
+        router.push('/onboarding')
+        return
+      }
+
+      if (!user.onboarded) {
+        router.push('/onboarding')
+        return
+      }
+
+      setUserData(user)
+      await loadTransactionData(walletAddress)
+      
+    } catch (error) {
+      console.error('Error checking wallet:', error)
+      router.push('/onboarding')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadTransactionData = async (walletAddress: string) => {
+    try {
+      const { data: borrowedLoans } = await supabase
+        .from('loans')
+        .select(`
+          *,
+          lender:users!loans_lender_id_fkey(username)
+        `)
+        .eq('borrower_id', walletAddress)
+        .order('created_at', { ascending: false })
+
+      if (borrowedLoans) {
+        setBorrowed(borrowedLoans as Loan[])
+      }
+
+      const { data: lendedLoans } = await supabase
+        .from('loans')
+        .select(`
+          *,
+          borrower:users!loans_borrower_id_fkey(username)
+        `)
+        .eq('lender_id', walletAddress)
+        .order('created_at', { ascending: false })
+
+      if (lendedLoans) {
+        setLended(lendedLoans as Loan[])
+      }
+
+      const { data: offers } = await supabase
+        .from('loan_offers')
+        .select(`
+          *,
+          lender:users!loan_offers_lender_id_fkey(username, pfp)
+        `)
+        .eq('status', 'active')
+        .neq('lender_id', walletAddress)
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (offers) {
+        setLoanOffers(offers as LoanOffer[])
+      }
+
+      const { data: requests } = await supabase
+        .from('loan_requests')
+        .select(`
+          *,
+          borrower:users!loan_requests_borrower_id_fkey(username, pfp, risk_score)
+        `)
+        .eq('status', 'active')
+        .neq('borrower_id', walletAddress)
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (requests) {
+        setLoanRequests(requests as LoanRequest[])
+      }
+
+    } catch (error) {
+      console.error('Error loading transaction data:', error)
+    }
+  }
 
   const copyAddress = () => {
-    navigator.clipboard.writeText(userData.walletAddress)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    if (userData?.wallet) {
+      navigator.clipboard.writeText(userData.wallet)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
-  const handleBorrowSubmit = () => {
-    console.log("Borrow request submitted:", borrowAmount)
-    setBorrowModalOpen(false)
-    setBorrowAmount("")
+  const handleBorrowSubmit = async () => {
+    if (!borrowAmount || !userData) return
+    
+    setIsSubmitting(true)
+    try {
+      const amount = parseInt(borrowAmount)
+      
+      if (amount > userData.max_loan) {
+        alert(`Maximum loan amount is $${userData.max_loan}`)
+        setIsSubmitting(false)
+        return
+      }
+
+      const { error } = await supabase
+        .from('loan_requests')
+        .insert({
+          borrower_id: userData.id,
+          amount: amount,
+          status: 'active'
+        })
+
+      if (error) throw error
+
+      alert('Loan request submitted successfully!')
+      setBorrowModalOpen(false)
+      setBorrowAmount("")
+      await loadTransactionData(userData.id)
+      
+    } catch (error) {
+      console.error('Error submitting borrow request:', error)
+      alert('Failed to submit loan request')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleLendToUser = (requestId: number) => {
-    console.log("Lending to request:", requestId)
-    setLendModalOpen(false)
+  const handleLendToUser = async (offerId: string) => {
+    if (!userData) return
+    
+    setIsSubmitting(true)
+    try {
+      const offer = loanOffers.find(o => o.id === offerId)
+      if (!offer) return
+
+      const dueDate = new Date()
+      dueDate.setDate(dueDate.getDate() + offer.repayment_duration)
+
+      const totalRepayment = Math.floor(
+        offer.amount * (1 + offer.interest_rate / 100)
+      )
+
+      const { error: loanError } = await supabase
+        .from('loans')
+        .insert({
+          lender_id: userData.id,
+          borrower_id: offer.lender_id,
+          principal_amount: offer.amount,
+          interest_rate: offer.interest_rate,
+          total_repayment_amount: totalRepayment,
+          repayment_duration_days: offer.repayment_duration,
+          start_date: new Date().toISOString(),
+          due_date: dueDate.toISOString(),
+          status: 'active'
+        })
+
+      if (loanError) throw loanError
+
+      await supabase
+        .from('loan_offers')
+        .update({ status: 'accepted' })
+        .eq('id', offerId)
+
+      alert('Successfully lent to user!')
+      setLendModalOpen(false)
+      await loadTransactionData(userData.id)
+      
+    } catch (error) {
+      console.error('Error lending to user:', error)
+      alert('Failed to process lending')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
+
+  const getProfileImage = (pfp: string | null | undefined, username: string): string => {
+    // Check if pfp exists and is a valid string
+    if (pfp && typeof pfp === 'string' && pfp.trim() !== '') {
+      // If it's a relative URL, you might need to prefix it with your domain
+      // For now, return as is
+      return pfp
+    }
+    // Fallback to dicebear avatar
+    return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
+  }
+
+  const getInitials = (name: string): string => {
+    return name.slice(0, 2).toUpperCase()
+  }
+
+  const formatDate = (dateString: string): string => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
+  }
+
+  const formatAddress = (addr: string): string => {
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  }
+
+  const calculateStats = () => {
+    const totalBorrowed = borrowed
+      .filter(l => l.status === 'active')
+      .reduce((sum, loan) => sum + loan.principal_amount, 0)
+    
+    const totalLent = lended
+      .filter(l => l.status === 'active')
+      .reduce((sum, loan) => sum + loan.principal_amount, 0)
+    
+    const transactions = borrowed.length + lended.length
+
+    return { totalBorrowed, totalLent, transactions }
+  }
+
+  const getRiskScoreColor = (score: number): string => {
+    if (score >= 700) return "text-green-500"
+    if (score >= 500) return "text-yellow-500"
+    return "text-red-500"
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Loading your dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!userData) {
+    return null
+  }
+
+  const stats = calculateStats()
 
   return (
-    <div className="flex min-h-screen bg-background">
-
-      <main className="flex-1 p-6 lg:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold gradient-text mb-2">Welcome back</h1>
-          <p className="text-muted-foreground">Manage your lending and borrowing activities</p>
+        <div className="mb-8 space-y-2">
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary via-primary to-primary/60 bg-clip-text text-transparent">
+            Welcome back, {userData.name}
+          </h1>
+          <p className="text-muted-foreground text-lg">Manage your crypto lending and borrowing activities</p>
         </div>
 
-        <Card className="glass-card mb-6 border-border/50">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-6 items-start md:items-start">
-              <Avatar className="h-24 w-24 border-2 border-primary/50 flex-shrink-0">
-                <AvatarImage src={userData.profileImage || "/placeholder.svg"} alt={userData.username} />
-                <AvatarFallback className="bg-primary/20 text-primary text-2xl">
-                  {userData.username.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+        {/* Profile Card */}
+        <Card className="mb-6 border-2 border-primary/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
+          <CardContent className="p-6 md:p-8">
+            <div className="flex flex-col lg:flex-row gap-8 items-start">
+              {/* Avatar Section */}
+              <div className="flex flex-col items-center space-y-4">
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary/60 rounded-full blur-xl opacity-50 group-hover:opacity-75 transition-opacity"></div>
+                  <Avatar className="relative h-32 w-32 border-4 border-primary/30 shadow-xl">
+                    <AvatarImage 
+                      src={getProfileImage(userData.pfp, userData.username)} 
+                      alt={userData.username}
+                    />
+                    <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/10 text-primary text-3xl font-bold">
+                      {userData.name.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+                <Badge className="bg-primary/20 text-primary border-primary/30 px-4 py-1">
+                  {userData.name}
+                </Badge>
+              </div>
 
-              <div className="flex-1 space-y-4">
-                {/* User Info */}
+              {/* User Info Section */}
+              <div className="flex-1 space-y-6 w-full">
                 <div>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
-                    <h2 className="text-2xl font-bold text-foreground">{userData.username}</h2>
-                    <Badge variant="secondary" className="w-fit bg-primary/20 text-primary border-primary/30">
-                      {userData.accountType}
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                    <code className="bg-muted/50 px-3 py-1 rounded-md font-mono">
-                      {userData.walletAddress.slice(0, 20)}...
+                  <h2 className="text-3xl font-bold text-foreground mb-3">@{userData.username}</h2>
+                  
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <code className="bg-muted/70 px-4 py-2 rounded-lg font-mono text-sm border border-border/50 backdrop-blur-sm">
+                      {formatAddress(userData.wallet)}
                     </code>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyAddress}>
-                      {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-9 w-9 hover:bg-primary/10" 
+                      onClick={copyAddress}
+                    >
+                      {copied ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
 
-                  <p className="text-sm text-muted-foreground">Member since {userData.joinedDate}</p>
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    Member since {formatDate(userData.created_at)}
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-2">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Borrowed</p>
-                    <p className="text-xl font-bold text-foreground">${userData.totalBorrowed.toLocaleString()}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Lent</p>
-                    <p className="text-xl font-bold text-chart-1">${userData.totalLent.toLocaleString()}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Transactions</p>
-                    <p className="text-xl font-bold text-foreground">{userData.transactions}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Credit Score</p>
-                    <p className="text-xl font-bold text-primary">{userData.creditScore}</p>
-                  </div>
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border-blue-500/20 hover:border-blue-500/40 transition-colors">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <ArrowDownRight className="h-4 w-4 text-blue-500" />
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Borrowed</p>
+                      </div>
+                      <p className="text-2xl font-bold text-foreground">${stats.totalBorrowed.toLocaleString()}</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-br from-green-500/10 to-green-500/5 border-green-500/20 hover:border-green-500/40 transition-colors">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <ArrowUpRight className="h-4 w-4 text-green-500" />
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Lent</p>
+                      </div>
+                      <p className="text-2xl font-bold text-foreground">${stats.totalLent.toLocaleString()}</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 border-purple-500/20 hover:border-purple-500/40 transition-colors">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp className="h-4 w-4 text-purple-500" />
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Transactions</p>
+                      </div>
+                      <p className="text-2xl font-bold text-foreground">{stats.transactions}</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20 hover:border-primary/40 transition-colors">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <DollarSign className="h-4 w-4 text-primary" />
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Risk Score</p>
+                      </div>
+                      <p className={`text-2xl font-bold ${getRiskScoreColor(userData.risk_score)}`}>
+                        {userData.risk_score}
+                      </p>
+                    </CardContent>
+                  </Card>
                 </div>
               </div>
             </div>
@@ -221,46 +471,49 @@ export default function ProfileDashboard() {
         </Card>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <Button
             size="lg"
-            className="h-16 text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
+            className="h-16 text-lg font-semibold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02]"
             onClick={() => setBorrowModalOpen(true)}
           >
-            <ArrowDownRight className="mr-2 h-5 w-5" />
+            <ArrowDownRight className="mr-2 h-6 w-6" />
             Borrow Crypto
           </Button>
 
           <Button
             size="lg"
             variant="outline"
-            className="h-16 text-lg font-semibold border-primary/50 hover:bg-primary/10 text-foreground bg-transparent"
+            className="h-16 text-lg font-semibold border-2 border-primary/50 hover:bg-primary/10 text-foreground bg-transparent shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02]"
             onClick={() => setLendModalOpen(true)}
           >
-            <ArrowUpRight className="mr-2 h-5 w-5" />
+            <ArrowUpRight className="mr-2 h-6 w-6" />
             Lend to Earn
           </Button>
         </div>
 
-        <Card className="glass-card border-border/50">
-          <CardHeader className="pb-4">
+        {/* Transaction History */}
+        <Card className="border-2 border-border/50 shadow-lg bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
+          <CardHeader className="pb-4 border-b border-border/50">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <CardTitle className="text-2xl">Transaction History</CardTitle>
-                <CardDescription className="text-muted-foreground">
+                <CardTitle className="text-2xl flex items-center gap-2">
+                  <Activity className="h-6 w-6 text-primary" />
+                  Transaction History
+                </CardTitle>
+                <CardDescription className="text-muted-foreground mt-1">
                   View your borrowing and lending activities
                 </CardDescription>
               </div>
 
-              {/* Toggle Buttons */}
-              <div className="flex gap-2 bg-muted/30 p-1 rounded-lg w-fit">
+              <div className="flex gap-2 bg-muted/50 p-1 rounded-lg w-fit border border-border/50">
                 <Button
                   variant={historyTab === "borrowed" ? "default" : "ghost"}
                   size="sm"
-                  className={`${
+                  className={`transition-all duration-200 ${
                     historyTab === "borrowed"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-primary text-primary-foreground shadow-md"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   }`}
                   onClick={() => setHistoryTab("borrowed")}
                 >
@@ -269,10 +522,10 @@ export default function ProfileDashboard() {
                 <Button
                   variant={historyTab === "lended" ? "default" : "ghost"}
                   size="sm"
-                  className={`${
+                  className={`transition-all duration-200 ${
                     historyTab === "lended"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-primary text-primary-foreground shadow-md"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   }`}
                   onClick={() => setHistoryTab("lended")}
                 >
@@ -282,56 +535,72 @@ export default function ProfileDashboard() {
             </div>
           </CardHeader>
 
-          <CardContent>
-            {/* Transaction Table */}
+          <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border/50">
-                    <th className="text-left py-3 px-4 text-muted-foreground font-semibold">
+                  <tr className="border-b border-border/50 bg-muted/30">
+                    <th className="text-left py-4 px-6 text-muted-foreground font-semibold">
                       {historyTab === "borrowed" ? "Lender" : "Borrower"}
                     </th>
-                    <th className="text-left py-3 px-4 text-muted-foreground font-semibold">Amount</th>
-                    <th className="text-left py-3 px-4 text-muted-foreground font-semibold">Interest Rate</th>
-                    <th className="text-left py-3 px-4 text-muted-foreground font-semibold">Status</th>
-                    <th className="text-left py-3 px-4 text-muted-foreground font-semibold">Start Date</th>
-                    <th className="text-left py-3 px-4 text-muted-foreground font-semibold">Due Date</th>
+                    <th className="text-left py-4 px-6 text-muted-foreground font-semibold">Amount</th>
+                    <th className="text-left py-4 px-6 text-muted-foreground font-semibold">Interest</th>
+                    <th className="text-left py-4 px-6 text-muted-foreground font-semibold">Status</th>
+                    <th className="text-left py-4 px-6 text-muted-foreground font-semibold">Start Date</th>
+                    <th className="text-left py-4 px-6 text-muted-foreground font-semibold">Due Date</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(historyTab === "borrowed" ? borrowedHistory : lendedHistory).map((transaction) => (
-                    <tr key={transaction.id} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
-                      <td className="py-3 px-4 text-foreground font-medium">
-                        {historyTab === "borrowed" ? transaction.lender : transaction.borrower}
+                  {(historyTab === "borrowed" ? borrowed : lended).map((transaction) => (
+                    <tr 
+                      key={transaction.id} 
+                      className="border-b border-border/30 hover:bg-muted/20 transition-colors"
+                    >
+                      <td className="py-4 px-6 text-foreground font-medium">
+                        {historyTab === "borrowed" 
+                          ? transaction.lender?.username || 'Unknown'
+                          : transaction.borrower?.username || 'Unknown'
+                        }
                       </td>
-                      <td className="py-3 px-4 text-foreground font-semibold">
-                        ${transaction.amount.toLocaleString()}
+                      <td className="py-4 px-6 text-foreground font-bold">
+                        ${transaction.principal_amount.toLocaleString()}
                       </td>
-                      <td className="py-3 px-4 text-chart-1 font-semibold">{transaction.interestRate}%</td>
-                      <td className="py-3 px-4">
+                      <td className="py-4 px-6 text-green-500 font-semibold">
+                        {transaction.interest_rate}%
+                      </td>
+                      <td className="py-4 px-6">
                         <Badge
-                          variant={transaction.status === "Active" ? "default" : "secondary"}
+                          variant={transaction.status === "active" ? "default" : "secondary"}
                           className={`${
-                            transaction.status === "Active"
-                              ? "bg-primary/20 text-primary border-primary/30"
+                            transaction.status === "active"
+                              ? "bg-green-500/20 text-green-500 border-green-500/30"
                               : "bg-muted/50 text-muted-foreground border-border/50"
                           }`}
                         >
                           {transaction.status}
                         </Badge>
                       </td>
-                      <td className="py-3 px-4 text-muted-foreground">{transaction.startDate}</td>
-                      <td className="py-3 px-4 text-muted-foreground">{transaction.dueDate}</td>
+                      <td className="py-4 px-6 text-muted-foreground">
+                        {formatDate(transaction.start_date)}
+                      </td>
+                      <td className="py-4 px-6 text-muted-foreground">
+                        {formatDate(transaction.due_date)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {/* Empty State */}
-            {(historyTab === "borrowed" ? borrowedHistory : lendedHistory).length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No {historyTab} transactions yet</p>
+            {(historyTab === "borrowed" ? borrowed : lended).length === 0 && (
+              <div className="text-center py-16">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted/50 mb-4">
+                  <Wallet className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <p className="text-muted-foreground text-lg">No {historyTab} transactions yet</p>
+                <p className="text-muted-foreground/70 text-sm mt-1">
+                  Start by {historyTab === "borrowed" ? "borrowing" : "lending"} crypto
+                </p>
               </div>
             )}
           </CardContent>
@@ -339,17 +608,20 @@ export default function ProfileDashboard() {
 
         {/* Borrow Modal */}
         <Dialog open={borrowModalOpen} onOpenChange={setBorrowModalOpen}>
-          <DialogContent className="glass-card border-border/50 text-foreground">
+          <DialogContent className="border-2 border-primary/20 shadow-2xl bg-gradient-to-br from-card to-card/50 backdrop-blur-sm max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-2xl">Borrow Crypto</DialogTitle>
+              <DialogTitle className="text-2xl flex items-center gap-2">
+                <ArrowDownRight className="h-6 w-6 text-primary" />
+                Borrow Crypto
+              </DialogTitle>
               <DialogDescription className="text-muted-foreground">
-                Enter the amount you wish to borrow. Your credit score: {userData.creditScore}
+                Enter the amount you wish to borrow
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-6 py-4">
               <div className="space-y-2">
-                <Label htmlFor="amount" className="text-foreground">
+                <Label htmlFor="amount" className="text-foreground text-base">
                   Amount (USD)
                 </Label>
                 <Input
@@ -358,18 +630,26 @@ export default function ProfileDashboard() {
                   placeholder="Enter amount"
                   value={borrowAmount}
                   onChange={(e) => setBorrowAmount(e.target.value)}
-                  className="bg-muted/50 border-border text-foreground"
+                  className="bg-muted/50 border-border text-foreground h-12 text-lg"
+                  max={userData.max_loan}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Maximum loan amount: <span className="font-semibold text-primary">${userData.max_loan.toLocaleString()}</span>
+                </p>
               </div>
 
-              <div className="bg-muted/30 p-4 rounded-lg space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Estimated Interest Rate</span>
-                  <span className="font-semibold text-foreground">7.5% APR</span>
+              <div className="bg-gradient-to-br from-muted/50 to-muted/30 p-5 rounded-xl space-y-3 border border-border/50">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Your Risk Score</span>
+                  <span className={`font-bold text-lg ${getRiskScoreColor(userData.risk_score)}`}>
+                    {userData.risk_score}/800
+                  </span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Collateral Required</span>
-                  <span className="font-semibold text-foreground">120%</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Status</span>
+                  <Badge className="bg-blue-500/20 text-blue-500 border-blue-500/30">
+                    Pending Review
+                  </Badge>
                 </div>
               </div>
             </div>
@@ -377,17 +657,25 @@ export default function ProfileDashboard() {
             <div className="flex gap-3">
               <Button
                 variant="outline"
-                className="flex-1 border-border text-foreground bg-transparent"
+                className="flex-1 border-border text-foreground bg-transparent hover:bg-muted h-11"
                 onClick={() => setBorrowModalOpen(false)}
+                disabled={isSubmitting}
               >
                 Cancel
               </Button>
               <Button
-                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                className="flex-1 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground h-11 shadow-lg"
                 onClick={handleBorrowSubmit}
-                disabled={!borrowAmount}
+                disabled={!borrowAmount || isSubmitting}
               >
-                Submit Request
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Submitting...
+                  </span>
+                ) : (
+                  'Submit Request'
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -395,66 +683,98 @@ export default function ProfileDashboard() {
 
         {/* Lend Modal */}
         <Dialog open={lendModalOpen} onOpenChange={setLendModalOpen}>
-          <DialogContent className="glass-card border-border/50 max-w-3xl text-foreground">
+          <DialogContent className="border-2 border-primary/20 shadow-2xl max-w-4xl bg-gradient-to-br from-card to-card/50 backdrop-blur-sm">
             <DialogHeader>
-              <DialogTitle className="text-2xl">Lending Marketplace</DialogTitle>
+              <DialogTitle className="text-2xl flex items-center gap-2">
+                <ArrowUpRight className="h-6 w-6 text-primary" />
+                Lending Marketplace
+              </DialogTitle>
               <DialogDescription className="text-muted-foreground">
-                Choose a borrower to lend to and earn interest
+                Choose an offer to accept and start earning interest
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3 max-h-[500px] overflow-y-auto">
-              {borrowRequests.map((request) => (
-                <Card key={request.id} className="glass-card border-border/50">
-                  <CardContent className="p-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-2 flex-1">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-10 w-10 border border-primary/30">
-                            <AvatarFallback className="bg-primary/20 text-primary text-sm">
-                              {request.borrower.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-semibold text-foreground">{request.borrower}</p>
-                            <p className="text-sm text-muted-foreground">{request.duration}</p>
+            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+              {loanOffers.length === 0 ? (
+                <div className="text-center py-16">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted/50 mb-4">
+                    <TrendingUp className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <p className="text-muted-foreground text-lg">No active loan offers available</p>
+                  <p className="text-muted-foreground/70 text-sm mt-1">Check back later for new opportunities</p>
+                </div>
+              ) : (
+                loanOffers.map((offer) => (
+                  <Card key={offer.id} className="border-2 border-border/50 hover:border-primary/30 transition-all duration-300 hover:shadow-lg bg-gradient-to-br from-card to-card/30">
+                    <CardContent className="p-5">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                        <div className="space-y-4 flex-1">
+                          <div className="flex items-center gap-4">
+                            <Avatar className="h-12 w-12 border-2 border-primary/30 shadow-md">
+                              <AvatarImage 
+                                src={getProfileImage(
+                                  offer.lender?.pfp || null, 
+                                  offer.lender?.username || 'User'
+                                )} 
+                              />
+                              <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/10 text-primary text-sm font-bold">
+                                {(offer.lender?.username || 'U').slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-bold text-foreground text-lg">
+                                @{offer.lender?.username || 'Unknown'}
+                              </p>
+                              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                <Activity className="h-3 w-3" />
+                                {offer.repayment_duration} days duration
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 p-3 rounded-lg border border-blue-500/20">
+                              <p className="text-xs text-muted-foreground mb-1">Amount</p>
+                              <p className="font-bold text-foreground text-lg">
+                                ${offer.amount.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="bg-gradient-to-br from-green-500/10 to-green-500/5 p-3 rounded-lg border border-green-500/20">
+                              <p className="text-xs text-muted-foreground mb-1">Interest</p>
+                              <p className="font-bold text-green-500 text-lg">{offer.interest_rate}%</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 p-3 rounded-lg border border-purple-500/20">
+                              <p className="text-xs text-muted-foreground mb-1">Posted</p>
+                              <p className="font-semibold text-foreground text-sm">
+                                {formatDate(offer.created_at)}
+                              </p>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                          <div>
-                            <p className="text-muted-foreground">Amount</p>
-                            <p className="font-semibold text-foreground">${request.amount.toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Interest</p>
-                            <p className="font-semibold text-chart-1">{request.interestRate}%</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Credit Score</p>
-                            <p className="font-semibold text-foreground">{request.creditScore}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Collateral</p>
-                            <p className="font-semibold text-foreground">{request.collateral}</p>
-                          </div>
-                        </div>
+                        <Button
+                          className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground lg:w-auto w-full h-11 shadow-lg hover:shadow-xl transition-all duration-300"
+                          onClick={() => handleLendToUser(offer.id)}
+                          disabled={isSubmitting}
+                        >
+                          {isSubmitting ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <ArrowUpRight className="mr-2 h-4 w-4" />
+                              Accept Offer
+                            </>
+                          )}
+                        </Button>
                       </div>
-
-                      <Button
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground sm:w-auto w-full"
-                        onClick={() => handleLendToUser(request.id)}
-                      >
-                        Lend Now
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </div>
           </DialogContent>
         </Dialog>
-      </main>
+      </div>
     </div>
   )
 }
