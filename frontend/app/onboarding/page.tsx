@@ -77,7 +77,7 @@ export default function CredChainOnboarding() {
         if (existingUser.onboarded) {
           setStep(4);
           setTimeout(() => {
-            window.location.href = '/dashboard';
+            window.location.href = '/profile';
           }, 2000);
         } else {
           setFormData({
@@ -170,7 +170,7 @@ export default function CredChainOnboarding() {
     }
 
     const { data } = supabase.storage
-      .from('user-profiles')
+      .from('images/pfp')
       .getPublicUrl(filePath);
 
     return data.publicUrl;
