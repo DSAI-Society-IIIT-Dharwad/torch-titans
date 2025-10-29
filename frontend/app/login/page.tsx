@@ -4,11 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { AlertCircle, Wallet, TrendingUp, DollarSign, Clock, CheckCircle } from 'lucide-react';
 
 const P2PLendingPlatform = () => {
-  const [account, setAccount] = useState(null);
-  const [balance, setBalance] = useState('0');
-  const [activeTab, setActiveTab] = useState('borrow');
-  const [loans, setLoans] = useState([]);
-  const [myLoans, setMyLoans] = useState([]);
+  const [account, setAccount] = useState<string | null>(null);
+  const [balance, setBalance] = useState<string>('0');
+  const [activeTab, setActiveTab] = useState<'borrow' | 'lend' | 'myloans'>('borrow');
+  const [loans, setLoans] = useState<any[]>([]);
+  const [myLoans, setMyLoans] = useState<any[]>([]);
   
   // Form states
   const [loanAmount, setLoanAmount] = useState('');
@@ -42,7 +42,7 @@ const P2PLendingPlatform = () => {
         setAccount(accounts[0]);
         getBalance(accounts[0]);
         
-        window.ethereum.on('accountsChanged', (accounts) => {
+        window.ethereum.on('accountsChanged', (accounts: string[]) => {
           setAccount(accounts[0] || null);
           if (accounts[0]) getBalance(accounts[0]);
         });
@@ -55,57 +55,69 @@ const P2PLendingPlatform = () => {
     }
   };
 
-  const getBalance = async (address) => {
+  const getBalance = async (address: string) => {
     try {
-      const balanceHex = await window.ethereum.request({
+      const eth = window.ethereum;
+      if (!eth) return;
+      const balanceHex = await eth.request({
         method: 'eth_getBalance',
         params: [address, 'latest']
       });
       const balanceEth = parseInt(balanceHex, 16) / 1e18;
       setBalance(balanceEth.toFixed(4));
-    } catch (error) {
-      console.error('Error getting balance:', error);
+    } catch (err: unknown) {
+      const e = err as any;
+      console.error('Error getting balance:', e.message ?? e);
     }
   };
 
   const loadLoans = async () => {
     try {
-      const stored = await window.storage.list('loan:', true);
+      const storage = window.storage;
+      if (!storage) {
+        setLoans([]);
+        return;
+      }
+      const stored = await storage.list('loan:', true);
       if (stored && stored.keys) {
-        const loanPromises = stored.keys.map(async (key) => {
-          const result = await window.storage.get(key, true);
+        const loanPromises = stored.keys.map(async (key: string) => {
+          const result = await storage.get(key, true);
           return result ? JSON.parse(result.value) : null;
         });
-        const allLoans = (await Promise.all(loanPromises)).filter(l => l !== null);
-        setLoans(allLoans.filter(l => l.status === 'open'));
+        const allLoans = (await Promise.all(loanPromises)).filter((l) => l !== null);
+        setLoans(allLoans.filter((l: any) => l.status === 'open'));
       }
-    } catch (error) {
-      console.log('No loans yet or error loading:', error);
+    } catch (err: unknown) {
+      const e = err as any;
+      console.log('No loans yet or error loading:', e.message ?? e);
       setLoans([]);
     }
-    
+
     loadMyLoans();
   };
 
   const loadMyLoans = async () => {
     if (!account) return;
-    
+
     try {
-      const stored = await window.storage.list('loan:', true);
+      const storage = window.storage;
+      if (!storage) return setMyLoans([]);
+      const stored = await storage.list('loan:', true);
       if (stored && stored.keys) {
-        const loanPromises = stored.keys.map(async (key) => {
-          const result = await window.storage.get(key, true);
+        const loanPromises = stored.keys.map(async (key: string) => {
+          const result = await storage.get(key, true);
           return result ? JSON.parse(result.value) : null;
         });
-        const allLoans = (await Promise.all(loanPromises)).filter(l => l !== null);
-        const userLoans = allLoans.filter(l => 
-          l.borrower.toLowerCase() === account.toLowerCase() || 
-          l.lender?.toLowerCase() === account.toLowerCase()
+        const allLoans = (await Promise.all(loanPromises)).filter((l) => l !== null) as any[];
+        const userLoans = allLoans.filter((l) =>
+          (l.borrower ?? '').toLowerCase() === account.toLowerCase() ||
+          (l.lender ?? '').toLowerCase() === account.toLowerCase()
         );
         setMyLoans(userLoans);
       }
-    } catch (error) {
-      console.log('Error loading my loans:', error);
+    } catch (err: unknown) {
+      const e = err as any;
+      console.log('Error loading my loans:', e.message ?? e);
       setMyLoans([]);
     }
   };
@@ -135,20 +147,23 @@ const P2PLendingPlatform = () => {
     };
 
     try {
-      await window.storage.set(loanId, JSON.stringify(loan), true);
+      const storage = window.storage;
+      if (!storage) throw new Error('Storage not available');
+      await storage.set(loanId, JSON.stringify(loan), true);
       alert('Loan request created successfully!');
       setLoanAmount('');
       setInterestRate('');
       setDuration('');
       setPurpose('');
       loadLoans();
-    } catch (error) {
-      console.error('Error creating loan:', error);
+    } catch (err: unknown) {
+      const e = err as any;
+      console.error('Error creating loan:', e.message ?? e);
       alert('Failed to create loan request');
     }
   };
 
-  const fundLoan = async (loan) => {
+  const fundLoan = async (loan: any) => {
     if (!account) {
       alert('Please connect your wallet first');
       return;
@@ -164,7 +179,9 @@ const P2PLendingPlatform = () => {
       const amountWei = '0x' + Math.floor(loan.amount * 1e18).toString(16);
       
       // Send transaction
-      const txHash = await window.ethereum.request({
+      const eth = window.ethereum;
+      if (!eth) throw new Error('Ethereum provider not found');
+      const txHash = await eth.request({
         method: 'eth_sendTransaction',
         params: [{
           from: account,
@@ -184,17 +201,20 @@ const P2PLendingPlatform = () => {
         repaymentDue: Date.now() + (loan.duration * 24 * 60 * 60 * 1000)
       };
 
-      await window.storage.set(loan.id, JSON.stringify(updatedLoan), true);
+  const storage = window.storage;
+  if (!storage) throw new Error('Storage not available');
+  await storage.set(loan.id, JSON.stringify(updatedLoan), true);
       
       alert(`Transaction sent! Hash: ${txHash.substring(0, 10)}...`);
       loadLoans();
-    } catch (error) {
-      console.error('Error funding loan:', error);
-      alert('Transaction failed: ' + error.message);
+    } catch (err: unknown) {
+      const e = err as any;
+      console.error('Error funding loan:', e.message ?? e);
+      alert('Transaction failed: ' + (e?.message ?? String(e)));
     }
   };
 
-  const repayLoan = async (loan) => {
+  const repayLoan = async (loan: any) => {
     if (!account || loan.borrower.toLowerCase() !== account.toLowerCase()) {
       alert('Only the borrower can repay this loan');
       return;
@@ -204,8 +224,11 @@ const P2PLendingPlatform = () => {
 
     try {
       const amountWei = '0x' + Math.floor(totalRepayment * 1e18).toString(16);
-      
-      const txHash = await window.ethereum.request({
+
+      const eth = window.ethereum;
+      if (!eth) throw new Error('Ethereum provider not found');
+
+      const txHash = await eth.request({
         method: 'eth_sendTransaction',
         params: [{
           from: account,
@@ -222,22 +245,25 @@ const P2PLendingPlatform = () => {
         repaymentTxHash: txHash
       };
 
-      await window.storage.set(loan.id, JSON.stringify(updatedLoan), true);
+  const storage = window.storage;
+  if (!storage) throw new Error('Storage not available');
+  await storage.set(loan.id, JSON.stringify(updatedLoan), true);
       
       alert(`Repayment sent! Hash: ${txHash.substring(0, 10)}...`);
       loadLoans();
-    } catch (error) {
-      console.error('Error repaying loan:', error);
-      alert('Repayment failed: ' + error.message);
+    } catch (err: unknown) {
+      const e = err as any;
+      console.error('Error repaying loan:', e.message ?? e);
+      alert('Repayment failed: ' + (e?.message ?? String(e)));
     }
   };
 
-  const formatAddress = (addr) => {
+  const formatAddress = (addr?: string) => {
     if (!addr) return '';
     return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
   };
 
-  const calculateRepayment = (amount, rate) => {
+  const calculateRepayment = (amount: number, rate: number) => {
     return (amount * (1 + rate / 100)).toFixed(4);
   };
 
@@ -362,12 +388,12 @@ const P2PLendingPlatform = () => {
                   
                   <div>
                     <label className="block text-sm font-medium mb-2">Purpose (optional)</label>
-                    <textarea
+                      <textarea
                       value={purpose}
                       onChange={(e) => setPurpose(e.target.value)}
                       className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       placeholder="Business expansion, education, etc."
-                      rows="3"
+                      rows={3}
                     />
                   </div>
 

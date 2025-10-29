@@ -299,7 +299,7 @@ export default function ProfileDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(historyTab === "borrowed" ? borrowedHistory : lendedHistory).map((transaction) => (
+                  {(historyTab === "borrowed" ? borrowedHistory : lendedHistory).map((transaction: any) => (
                     <tr key={transaction.id} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
                       <td className="py-3 px-4 text-foreground font-medium">
                         {historyTab === "borrowed" ? transaction.lender : transaction.borrower}
