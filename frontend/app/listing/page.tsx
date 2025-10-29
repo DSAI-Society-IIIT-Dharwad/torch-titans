@@ -1,107 +1,86 @@
-'use client'
-import React, { useState } from 'react';
+"use client"
+import React, { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+
+const supabase = createClient()
 
 const CredChainListings = () => {
-  const [activeTab, setActiveTab] = useState('borrowers');
+  const [activeTab, setActiveTab] = useState<'borrowers' | 'lenders'>('borrowers')
+  const [borrowers, setBorrowers] = useState<any[]>([])
+  const [lenders, setLenders] = useState<any[]>([])
+  const [loading, setLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Dummy data for borrowers
-  //
-  const borrowers = [
-    {
-      id: 1,
-      name: 'Sarah Mitchell',
-      username: '@sarahm',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-      amount: '5,000 USDC',
-      createdAt: '2 hours ago'
-    },
-    {
-      id: 2,
-      name: 'James Chen',
-      username: '@jameschen',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=James',
-      amount: '12,500 USDC',
-      createdAt: '5 hours ago'
-    },
-    {
-      id: 3,
-      name: 'Maria Rodriguez',
-      username: '@mariarodz',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Maria',
-      amount: '8,000 USDC',
-      createdAt: '1 day ago'
-    },
-    {
-      id: 4,
-      name: 'Alex Thompson',
-      username: '@alexthompson',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex',
-      amount: '3,500 USDC',
-      createdAt: '1 day ago'
-    },
-    {
-      id: 5,
-      name: 'Priya Patel',
-      username: '@priyap',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Priya',
-      amount: '15,000 USDC',
-      createdAt: '2 days ago'
+  const formatDate = (d: string | null | undefined) => {
+    if (!d) return ''
+    try {
+      return new Date(d).toLocaleString()
+    } catch {
+      return d
     }
-  ];
+  }
 
-  // Dummy data for lenders
-  const lenders = [
-    {
-      id: 1,
-      name: 'David Kim',
-      username: '@davidkim',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David',
-      amount: '50,000 USDC',
-      interestRate: '8.5%',
-      duration: '12 months',
-      createdAt: '3 hours ago'
-    },
-    {
-      id: 2,
-      name: 'Emma Watson',
-      username: '@emmaw',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-      amount: '100,000 USDC',
-      interestRate: '7.2%',
-      duration: '24 months',
-      createdAt: '6 hours ago'
-    },
-    {
-      id: 3,
-      name: 'Michael Zhang',
-      username: '@mzhang',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael',
-      amount: '25,000 USDC',
-      interestRate: '9.0%',
-      duration: '6 months',
-      createdAt: '1 day ago'
-    },
-    {
-      id: 4,
-      name: 'Sophie Anderson',
-      username: '@sophiea',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sophie',
-      amount: '75,000 USDC',
-      interestRate: '6.8%',
-      duration: '18 months',
-      createdAt: '1 day ago'
-    },
-    {
-      id: 5,
-      name: 'Carlos Martinez',
-      username: '@carlosm',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Carlos',
-      amount: '30,000 USDC',
-      interestRate: '8.0%',
-      duration: '12 months',
-      createdAt: '2 days ago'
+  const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`
+
+  const loadListings = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      // Loan requests -> Borrowers
+      const { data: requests, error: reqErr } = await supabase
+        .from('loan_requests')
+        .select(`id, borrower_id, amount, repayment_duration_days, status, created_at, borrower:users!loan_requests_borrower_id_fkey(username, pfp)`)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (reqErr) throw reqErr
+
+      const mappedBorrowers = (requests || []).map((r: any) => ({
+        id: r.id,
+        name: r.borrower?.username || r.borrower_id,
+        username: r.borrower?.username ? `@${r.borrower.username}` : formatAddress(r.borrower_id),
+        avatar: r.borrower?.pfp || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(r.borrower?.username || r.borrower_id)}`,
+        amount: `$${Number(r.amount).toLocaleString()}`,
+        createdAt: formatDate(r.created_at)
+      }))
+
+      setBorrowers(mappedBorrowers)
+
+      // Loan offers -> Lenders
+      const { data: offers, error: offersErr } = await supabase
+        .from('loan_offers')
+        .select(`id, lender_id, amount, interest_rate, repayment_duration, status, created_at, lender:users!loan_offers_lender_id_fkey(username, pfp)`)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (offersErr) throw offersErr
+
+      const mappedLenders = (offers || []).map((o: any) => ({
+        id: o.id,
+        name: o.lender?.username || o.lender_id,
+        username: o.lender?.username ? `@${o.lender.username}` : formatAddress(o.lender_id),
+        avatar: o.lender?.pfp || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(o.lender?.username || o.lender_id)}`,
+        amount: `$${Number(o.amount).toLocaleString()}`,
+        interestRate: `${o.interest_rate}%`,
+        duration: `${o.repayment_duration} days`,
+        createdAt: formatDate(o.created_at)
+      }))
+
+      setLenders(mappedLenders)
+    } catch (e: any) {
+      console.error('Error loading listings', e)
+      setError(e?.message || String(e))
+      // leave borrowers/lenders empty on error
+    } finally {
+      setLoading(false)
     }
-  ];
+  }
+
+  useEffect(() => {
+    loadListings()
+  }, [])
 
   return (
     <div className="min-h-screen bg-black text-white p-8">
