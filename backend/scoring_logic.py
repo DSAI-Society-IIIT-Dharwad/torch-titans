@@ -106,10 +106,11 @@ def get_wallet_risk_score(wallet_address: str):
         analysis.update({"erc20_token_variety_count": erc20_token_count, "token_score": token_score})
 
     except Exception as e:
-        # If any API call fails, raise a new exception to be caught by update_scores.py
+        # If any API call fails, raise a new exception
         raise Exception(f"Failed during API call: {e}")
 
     # --- Final Score ---
+    # MOVED this code to be *before* the final return
     final_score = round(max(300, min(850, 300 + score)))
     risk_level = "low" if final_score > 700 else "medium" if final_score > 550 else "high"
 

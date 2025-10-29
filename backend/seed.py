@@ -19,60 +19,60 @@ print("Connected to Supabase.")
 
 # --- 1. MOCK USERS (No changes) ---
 users_data = [
-  {'id': 'privy-borrower-1', 'name': 'Alice Borrower', 'username': 'alice_b', 'wallet': '0xborrower1...fake', 'onboarded': True, 'risk_score': 620},
-  {'id': 'privy-borrower-2', 'name': 'Bob Borrower', 'username': 'bob_b', 'wallet': '0xborrower2...fake', 'onboarded': True, 'risk_score': 450},
-  {'id': 'privy-borrower-3', 'name': 'Charlie Borrower', 'username': 'charlie_b', 'wallet': '0xborrower3...fake', 'onboarded': True, 'risk_score': 710},
-  {'id': 'privy-borrower-4', 'name': 'David Borrower', 'username': 'david_b', 'wallet': '0xborrower4...fake', 'onboarded': True, 'risk_score': 550},
-  {'id': 'privy-borrower-5', 'name': 'Eve Borrower', 'username': 'eve_b', 'wallet': '0xborrower5...fake', 'onboarded': True, 'risk_score': 800},
-  {'id': 'privy-lender-1', 'name': 'Frank Lender', 'username': 'frank_l', 'wallet': '0xlender1...fake', 'onboarded': True, 'risk_score': 700},
-  {'id': 'privy-lender-2', 'name': 'Grace Lender', 'username': 'grace_l', 'wallet': '0xlender2...fake', 'onboarded': True, 'risk_score': 700},
-  {'id': 'privy-lender-3', 'name': 'Heidi Lender', 'username': 'heidi_l', 'wallet': '0xlender3...fake', 'onboarded': True, 'risk_score': 700},
-  {'id': 'privy-lender-4', 'name': 'Ivan Lender', 'username': 'ivan_l', 'wallet': '0xlender4...fake', 'onboarded': True, 'risk_score': 700},
-  {'id': 'privy-lender-5', 'name': 'Judy Lender', 'username': 'judy_l', 'wallet': '0xlender5...fake', 'onboarded': True, 'risk_score': 700}
+  {'id': '0xborrower1...fake', 'name': 'Alice Borrower', 'username': 'alice_b', 'wallet': '0xborrower1...fake', 'onboarded': True, 'risk_score': 620, 'max_loan': 1000},
+  {'id': '0xborrower2...fake', 'name': 'Bob Borrower', 'username': 'bob_b', 'wallet': '0xborrower2...fake', 'onboarded': True, 'risk_score': 450, 'max_loan': 250},
+  {'id': '0xborrower3...fake', 'name': 'Charlie Borrower', 'username': 'charlie_b', 'wallet': '0xborrower3...fake', 'onboarded': True, 'risk_score': 710, 'max_loan': 5000},
+  {'id': '0xborrower4...fake', 'name': 'David Borrower', 'username': 'david_b', 'wallet': '0xborrower4...fake', 'onboarded': True, 'risk_score': 550, 'max_loan': 1000},
+  {'id': '0xborrower5...fake', 'name': 'Eve Borrower', 'username': 'eve_b', 'wallet': '0xborrower5...fake', 'onboarded': True, 'risk_score': 800, 'max_loan': 5000},
+  {'id': '0xlender1...fake', 'name': 'Frank Lender', 'username': 'frank_l', 'wallet': '0xlender1...fake', 'onboarded': True, 'risk_score': 700, 'max_loan': 5000},
+  {'id': '0xlender2...fake', 'name': 'Grace Lender', 'username': 'grace_l', 'wallet': '0xlender2...fake', 'onboarded': True, 'risk_score': 700, 'max_loan': 5000},
+  {'id': '0xlender3...fake', 'name': 'Heidi Lender', 'username': 'heidi_l', 'wallet': '0xlender3...fake', 'onboarded': True, 'risk_score': 700, 'max_loan': 5000},
+  {'id': '0xlender4...fake', 'name': 'Ivan Lender', 'username': 'ivan_l', 'wallet': '0xlender4...fake', 'onboarded': True, 'risk_score': 700, 'max_loan': 5000},
+  {'id': '0xlender5...fake', 'name': 'Judy Lender', 'username': 'judy_l', 'wallet': '0xlender5...fake', 'onboarded': True, 'risk_score': 700, 'max_loan': 5000}
 ]
 
-# --- 2. MOCK LOAN REQUESTS (No changes) ---
+# --- 2. MOCK LOAN REQUESTS ---
+# MODIFIED: Added 'repayment_duration_days' back in
 requests_data = [
-  {'borrower_id': 'privy-borrower-1', 'amount': 1000, 'repayment_duration_days': 30, 'status': 'closed'},
-  {'borrower_id': 'privy-borrower-2', 'amount': 500, 'repayment_duration_days': 14, 'status': 'closed'},
-  {'borrower_id': 'privy-borrower-3', 'amount': 2500, 'repayment_duration_days': 60, 'status': 'closed'},
-  {'borrower_id': 'privy-borrower-4', 'amount': 800, 'repayment_duration_days': 7, 'status': 'closed'},
-  {'borrower_id': 'privy-borrower-5', 'amount': 5000, 'repayment_duration_days': 90, 'status': 'closed'},
-  {'borrower_id': 'privy-borrower-1', 'amount': 200, 'repayment_duration_days': 10, 'status': 'closed'},
-  {'borrower_id': 'privy-borrower-2', 'amount': 1500, 'repayment_duration_days': 45, 'status': 'closed'},
-  {'borrower_id': 'privy-borrower-3', 'amount': 300, 'repayment_duration_days': 30, 'status': 'closed'},
-  {'borrower_id': 'privy-borrower-4', 'amount': 1200, 'repayment_duration_days': 14, 'status': 'active'},
-  {'borrower_id': 'privy-borrower-5', 'amount': 1000, 'repayment_duration_days': 30, 'status': 'active'}
+  {'borrower_id': '0xborrower1...fake', 'amount': 1000, 'repayment_duration_days': 30, 'status': 'closed'},
+  {'borrower_id': '0xborrower2...fake', 'amount': 500, 'repayment_duration_days': 14, 'status': 'closed'},
+  {'borrower_id': '0xborrower3...fake', 'amount': 2500, 'repayment_duration_days': 60, 'status': 'closed'},
+  {'borrower_id': '0xborrower4...fake', 'amount': 800, 'repayment_duration_days': 7, 'status': 'closed'},
+  {'borrower_id': '0xborrower5...fake', 'amount': 5000, 'repayment_duration_days': 90, 'status': 'closed'},
+  {'borrower_id': '0xborrower1...fake', 'amount': 200, 'repayment_duration_days': 10, 'status': 'closed'},
+  {'borrower_id': '0xborrower2...fake', 'amount': 1500, 'repayment_duration_days': 45, 'status': 'closed'},
+  {'borrower_id': '0xborrower3...fake', 'amount': 300, 'repayment_duration_days': 30, 'status': 'closed'},
+  {'borrower_id': '0xborrower4...fake', 'amount': 1200, 'repayment_duration_days': 14, 'status': 'active'},
+  {'borrower_id': '0xborrower5...fake', 'amount': 1000, 'repayment_duration_days': 30, 'status': 'active'}
 ]
 
 # --- 3. MOCK LOAN OFFERS (No changes) ---
 offers_data = [
-  {'lender_id': 'privy-lender-1', 'amount': 1000, 'interest_rate': 5, 'repayment_duration': 30},
-  {'lender_id': 'privy-lender-2', 'amount': 500, 'interest_rate': 8, 'repayment_duration': 14},
-  {'lender_id': 'privy-lender-3', 'amount': 2500, 'interest_rate': 4, 'repayment_duration': 60},
-  {'lender_id': 'privy-lender-4', 'amount': 800, 'interest_rate': 7, 'repayment_duration': 7},
-  {'lender_id': 'privy-lender-5', 'amount': 5000, 'interest_rate': 3, 'repayment_duration': 90},
-  {'lender_id': 'privy-lender-1', 'amount': 200, 'interest_rate': 9, 'repayment_duration': 10},
-  {'lender_id': 'privy-lender-2', 'amount': 1500, 'interest_rate': 6, 'repayment_duration': 45},
-  {'lender_id': 'privy-lender-3', 'amount': 300, 'interest_rate': 10, 'repayment_duration': 30},
-  {'lender_id': 'privy-lender-4', 'amount': 1200, 'interest_rate': 8, 'repayment_duration': 14},
-  {'lender_id': 'privy-lender-5', 'amount': 1000, 'interest_rate': 7, 'repayment_duration': 30}
+  {'lender_id': '0xlender1...fake', 'amount': 1000, 'interest_rate': 5, 'repayment_duration': 30, 'status': 'accept'},
+  {'lender_id': '0xlender2...fake', 'amount': 500, 'interest_rate': 8, 'repayment_duration': 14, 'status': 'accept'},
+  {'lender_id': '0xlender3...fake', 'amount': 2500, 'interest_rate': 4, 'repayment_duration': 60, 'status': 'accept'},
+  {'lender_id': '0xlender4...fake', 'amount': 800, 'interest_rate': 7, 'repayment_duration': 7, 'status': 'accept'},
+  {'lender_id': '0xlender5...fake', 'amount': 5000, 'interest_rate': 3, 'repayment_duration': 90, 'status': 'accept'},
+  {'lender_id': '0xlender1...fake', 'amount': 200, 'interest_rate': 9, 'repayment_duration': 10, 'status': 'accept'},
+  {'lender_id': '0xlender2...fake', 'amount': 1500, 'interest_rate': 6, 'repayment_duration': 45, 'status': 'accept'},
+  {'lender_id': '0xlender3...fake', 'amount': 300, 'interest_rate': 10, 'repayment_duration': 30, 'status': 'accept'},
+  {'lender_id': '0xlender4...fake', 'amount': 1200, 'interest_rate': 8, 'repayment_duration': 14, 'status': 'active'},
+  {'lender_id': '0xlender5...fake', 'amount': 1000, 'interest_rate': 7, 'repayment_duration': 30, 'status': 'active'}
 ]
 
-# --- 4. MOCK LOANS ---
-# MODIFIED: Changed 'repaid' and 'defaulted' to 'closed'
+# --- 4. MOCK LOANS (No changes) ---
 now = datetime.now(timezone.utc)
 loans_data = [
-  {'lender_id': 'privy-lender-1', 'borrower_id': 'privy-borrower-1', 'principal_amount': 1000, 'interest_rate': 5, 'total_repayment_amount': 1050, 'repayment_duration_days': 30, 'start_date': (now - timedelta(days=5)).isoformat(), 'due_date': (now + timedelta(days=25)).isoformat(), 'status': 'active'},
-  {'lender_id': 'privy-lender-2', 'borrower_id': 'privy-borrower-2', 'principal_amount': 500, 'interest_rate': 8, 'total_repayment_amount': 540, 'repayment_duration_days': 14, 'start_date': (now - timedelta(days=2)).isoformat(), 'due_date': (now + timedelta(days=12)).isoformat(), 'status': 'active'},
-  {'lender_id': 'privy-lender-3', 'borrower_id': 'privy-borrower-3', 'principal_amount': 2500, 'interest_rate': 4, 'total_repayment_amount': 2600, 'repayment_duration_days': 60, 'start_date': (now - timedelta(days=10)).isoformat(), 'due_date': (now + timedelta(days=50)).isoformat(), 'status': 'active'},
-  {'lender_id': 'privy-lender-4', 'borrower_id': 'privy-borrower-4', 'principal_amount': 800, 'interest_rate': 7, 'total_repayment_amount': 856, 'repayment_duration_days': 7, 'start_date': (now - timedelta(days=1)).isoformat(), 'due_date': (now + timedelta(days=6)).isoformat(), 'status': 'active'},
-  {'lender_id': 'privy-lender-5', 'borrower_id': 'privy-borrower-5', 'principal_amount': 5000, 'interest_rate': 3, 'total_repayment_amount': 5150, 'repayment_duration_days': 90, 'start_date': (now - timedelta(days=20)).isoformat(), 'due_date': (now + timedelta(days=70)).isoformat(), 'status': 'active'},
-  {'lender_id': 'privy-lender-1', 'borrower_id': 'privy-borrower-1', 'principal_amount': 200, 'interest_rate': 9, 'total_repayment_amount': 218, 'repayment_duration_days': 10, 'start_date': (now - timedelta(days=3)).isoformat(), 'due_date': (now + timedelta(days=7)).isoformat(), 'status': 'active'},
-  {'lender_id': 'privy-lender-2', 'borrower_id': 'privy-borrower-2', 'principal_amount': 1500, 'interest_rate': 6, 'total_repayment_amount': 1590, 'repayment_duration_days': 45, 'start_date': (now - timedelta(days=15)).isoformat(), 'due_date': (now + timedelta(days=30)).isoformat(), 'status': 'active'},
-  {'lender_id': 'privy-lender-3', 'borrower_id': 'privy-borrower-3', 'principal_amount': 300, 'interest_rate': 10, 'total_repayment_amount': 330, 'repayment_duration_days': 30, 'start_date': (now - timedelta(days=25)).isoformat(), 'due_date': (now + timedelta(days=5)).isoformat(), 'status': 'active'},
-  {'lender_id': 'privy-lender-4', 'borrower_id': 'privy-borrower-4', 'principal_amount': 1200, 'interest_rate': 8, 'total_repayment_amount': 1296, 'repayment_duration_days': 14, 'start_date': (now - timedelta(days=40)).isoformat(), 'due_date': (now - timedelta(days=26)).isoformat(), 'status': 'closed'}, # <-- FIX
-  {'lender_id': 'privy-lender-5', 'borrower_id': 'privy-borrower-5', 'principal_amount': 1000, 'interest_rate': 7, 'total_repayment_amount': 1070, 'repayment_duration_days': 30, 'start_date': (now - timedelta(days=45)).isoformat(), 'due_date': (now - timedelta(days=15)).isoformat(), 'status': 'closed'}  # <-- FIX
+  {'lender_id': '0xlender1...fake', 'borrower_id': '0xborrower1...fake', 'principal_amount': 1000, 'interest_rate': 5, 'total_repayment_amount': 1050, 'repayment_duration_days': 30, 'start_date': (now - timedelta(days=5)).isoformat(), 'due_date': (now + timedelta(days=25)).isoformat(), 'status': 'active'},
+  {'lender_id': '0xlender2...fake', 'borrower_id': '0xborrower2...fake', 'principal_amount': 500, 'interest_rate': 8, 'total_repayment_amount': 540, 'repayment_duration_days': 14, 'start_date': (now - timedelta(days=2)).isoformat(), 'due_date': (now + timedelta(days=12)).isoformat(), 'status': 'active'},
+  {'lender_id': '0xlender3...fake', 'borrower_id': '0xborrower3...fake', 'principal_amount': 2500, 'interest_rate': 4, 'total_repayment_amount': 2600, 'repayment_duration_days': 60, 'start_date': (now - timedelta(days=10)).isoformat(), 'due_date': (now + timedelta(days=50)).isoformat(), 'status': 'active'},
+  {'lender_id': '0xlender4...fake', 'borrower_id': '0xborrower4...fake', 'principal_amount': 800, 'interest_rate': 7, 'total_repayment_amount': 856, 'repayment_duration_days': 7, 'start_date': (now - timedelta(days=1)).isoformat(), 'due_date': (now + timedelta(days=6)).isoformat(), 'status': 'active'},
+  {'lender_id': '0xlender5...fake', 'borrower_id': '0xborrower5...fake', 'principal_amount': 5000, 'interest_rate': 3, 'total_repayment_amount': 5150, 'repayment_duration_days': 90, 'start_date': (now - timedelta(days=20)).isoformat(), 'due_date': (now + timedelta(days=70)).isoformat(), 'status': 'active'},
+  {'lender_id': '0xlender1...fake', 'borrower_id': '0xborrower1...fake', 'principal_amount': 200, 'interest_rate': 9, 'total_repayment_amount': 218, 'repayment_duration_days': 10, 'start_date': (now - timedelta(days=3)).isoformat(), 'due_date': (now + timedelta(days=7)).isoformat(), 'status': 'active'},
+  {'lender_id': '0xlender2...fake', 'borrower_id': '0xborrower2...fake', 'principal_amount': 1500, 'interest_rate': 6, 'total_repayment_amount': 1590, 'repayment_duration_days': 45, 'start_date': (now - timedelta(days=15)).isoformat(), 'due_date': (now + timedelta(days=30)).isoformat(), 'status': 'active'},
+  {'lender_id': '0xlender3...fake', 'borrower_id': '0xborrower3...fake', 'principal_amount': 300, 'interest_rate': 10, 'total_repayment_amount': 330, 'repayment_duration_days': 30, 'start_date': (now - timedelta(days=25)).isoformat(), 'due_date': (now + timedelta(days=5)).isoformat(), 'status': 'active'},
+  {'lender_id': '0xlender4...fake', 'borrower_id': '0xborrower4...fake', 'principal_amount': 1200, 'interest_rate': 8, 'total_repayment_amount': 1296, 'repayment_duration_days': 14, 'start_date': (now - timedelta(days=40)).isoformat(), 'due_date': (now - timedelta(days=26)).isoformat(), 'status': 'closed'},
+  {'lender_id': '0xlender5...fake', 'borrower_id': '0xborrower5...fake', 'principal_amount': 1000, 'interest_rate': 7, 'total_repayment_amount': 1070, 'repayment_duration_days': 30, 'start_date': (now - timedelta(days=45)).isoformat(), 'due_date': (now - timedelta(days=15)).isoformat(), 'status': 'closed'}
 ]
 
 
@@ -80,10 +80,13 @@ def clear_tables():
     """Deletes data in reverse order to respect foreign keys."""
     print("--- CLEARING ALL TABLES ---")
     try:
+        # Delete from tables that reference 'users' first
         supabase.table("loans").delete().neq('status', 'non-existent-status').execute()
-        supabase.table("loan_offers").delete().neq('interest_rate', -100).execute() 
+        supabase.table("loan_offers").delete().neq('status', 'non-existent-status').execute()
         supabase.table("loan_requests").delete().neq('status', 'non-existent-status').execute()
-        supabase.table("users").delete().neq('wallet', 'non-existent-status').execute()
+        
+        # Delete from 'users' last
+        supabase.table("users").delete().neq('username', 'non-existent-username').execute()
         
         print("All tables cleared successfully.")
     except Exception as e:
@@ -108,7 +111,7 @@ def seed_data():
         if r_res.data:
             print(f"Successfully inserted {len(r_res.data)} requests.")
         else:
-            raise Exception(r_res.error or "Unknown error inserting requests")
+            raise Exception(p_res.error or "Unknown error inserting requests")
         
         # 3. Loan Offers
         print(f"Seeding {len(offers_data)} loan offers...")
